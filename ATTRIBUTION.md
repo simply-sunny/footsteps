@@ -12,8 +12,8 @@ The app icon artwork for Footsteps is adapted from the vector artwork **Footstep
 ## Modifications & Adapted Assets
 The following modifications were made to adapt the original vector shape for iOS app icon requirements:
 1. Rendered the vector paths at 1024×1024 resolution with centered 75% safe-zone canvas inset.
-2. Created a default appearance icon (`AppIcon-Default.png`): solid white footstep glyphs on a solid black opaque square canvas.
-3. Created a dark appearance icon (`AppIcon-Dark.png`): solid black footstep glyphs on a solid white opaque square canvas.
+2. Created a default appearance icon (`AppIcon-Default.png`): solid black footstep glyphs on a solid white opaque square canvas.
+3. Created a dark appearance icon (`AppIcon-Dark.png`): solid white footstep glyphs on a solid black opaque square canvas.
 4. Packaged rendered icons in `Footsteps/Assets.xcassets/AppIcon.appiconset/` and preserved the source vector file at `Art/Footsteps_icon2.svg`.
 
 ## License for Adapted Icon Assets

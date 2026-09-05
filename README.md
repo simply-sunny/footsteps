@@ -1,5 +1,8 @@
 <p align="center">
-  <img src="Footsteps/Assets.xcassets/AppIcon.appiconset/AppIcon-Default.png" width="128" height="128" alt="Footsteps logo" />
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="Footsteps/Assets.xcassets/AppIcon.appiconset/AppIcon-Dark.png">
+    <img src="Footsteps/Assets.xcassets/AppIcon.appiconset/AppIcon-Default.png" width="128" height="128" alt="Footsteps logo" />
+  </picture>
 </p>
 
 # Footsteps
