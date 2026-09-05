@@ -1,65 +1,62 @@
+<p align="center">
+  <img src="Footsteps/Assets.xcassets/AppIcon.appiconset/AppIcon-Default.png" width="128" height="128" alt="Footsteps logo" />
+</p>
+
 # Footsteps
 
 A minimal, local-first iOS 17+ app that passively records device location and renders a daily 2D density heatmap.
 
-## Architecture
-- **`FootstepsApp.swift`**: App entry point, storage file protection configuration (`completeUntilFirstUserAuthentication`), and background relaunch handling (`UIApplication.LaunchOptionsKey.location`).
-- **`LocationManager.swift`**: `@MainActor` singleton managing continuous tracking (100m accuracy, 50m distance filter), significant location change monitoring, staged permissions, and background persistence.
-- **`LocationPoint.swift`**: SwiftData `@Model` storing `latitude`, `longitude`, `timestamp`, and `horizontalAccuracy`.
-- **`HeatmapMapView.swift`**: `UIViewRepresentable` wrapping `MKMapView` and rendering density grid overlays (`HeatmapOverlay` and `HeatmapOverlayRenderer`) with intensity-scaled alpha blending.
-- **`DailyTrackerView.swift`**: SwiftUI interface providing day-by-day navigation, predicate-filtered daily queries, and permission/error handling.
-- **`HeatmapGridMath.swift`**: Foundation math utilities for coordinate validation, DST-aware calendar day intervals, navigation guards, and density grid bucketing.
+## Features
 
-## Requirements & Device Setup
+- **Passive Background Tracking**: Continuous location monitoring (100m accuracy, 50m distance filter) with significant location change wakeups.
+- **Local-First Storage**: Persistent location point history stored locally on-device using SwiftData with encrypted file protection (`completeUntilFirstUserAuthentication`).
+- **2D Density Heatmap Overlay**: Custom MapKit overlay (`HeatmapOverlay` and `HeatmapOverlayRenderer`) binning points into density grid cells with dynamic alpha blending.
+- **Day-by-Day Navigation**: Daily tracker UI with date stepping, calendar day boundary calculations, and future date navigation guards.
+- **Zero Third-Party Dependencies**: Pure Apple system frameworks (`SwiftUI`, `SwiftData`, `MapKit`, `CoreLocation`, `UIKit`).
+- **Native iOS 18 Dark Appearance Icon**: Configured asset catalog supporting both default and native iOS 18 dark appearance icon styles.
 
-### Prerequisites
-- **Target**: iOS 17.0+
-- **Toolchain**: Xcode 15+ / Swift 5.0 mode (`SWIFT_VERSION = 5.0`) on Swift 6 toolchain
-- **Dependencies**: Zero external dependencies (Apple system frameworks only)
+## Requirements
 
-### Code Signing & Physical Device Deployment
-1. **Open Project**: Open `Footsteps.xcodeproj` in Xcode.
-2. **Configure Signing**: Under **Footsteps Target > Signing & Capabilities**:
-   - Check **Automatically manage signing**.
-   - Select your **Personal Team**.
-   - Change the **Bundle Identifier** to a globally unique identifier (e.g. `com.<your-name>.Footsteps`).
-3. **Enable Developer Mode**: On iOS 16+, enable Developer Mode on your physical device via **Settings > Privacy & Security > Developer Mode** and restart the device when prompted.
-4. **Build & Run**: Connect your device via USB/Wi-Fi, trust the computer if prompted, select your device in the Xcode run destination, and press **Run** (`Cmd + R`).
-5. **Provisioning Note**: Free personal Apple Developer accounts generate development provisioning profiles that periodically expire, requiring the app to be re-signed and reinstalled from Xcode. This workflow is intended for personal self-use and testing, not App Store distribution.
+- iOS 17.0+
+- Xcode 15+ (Swift 5.0 mode on Swift 6 toolchain)
+- Physical iPhone with Developer Mode enabled (for unattended on-device tracking)
+- Apple Developer account (free personal team or paid developer membership)
 
-## Background Tracking & Lifecycle Behavior
+## Install
 
-- **Location Authorization Levels**:
-  - **Always Authorization**: Enables unattended background relaunches and significant location change wakeups by iOS even if the app process has been terminated by system resource pressure.
-  - **WhenInUse Authorization**: An ongoing authorized location session with background location capabilities (`UIBackgroundModes: location`) can continue recording points in the background while the process remains active, but iOS will not automatically relaunch a terminated process without Always authorization.
-- **System Constraints & Battery Management**:
-  - **User Force-Quit**: If the user explicitly terminates the app from the iOS App Switcher, iOS suspends location delivery and will not wake or relaunch the app. The user must manually reopen the app to resume tracking.
-  - **System-Controlled Delivery**: Location event dispatching in the background is governed by iOS power management and hardware heuristics; instantaneous delivery for every single movement is not guaranteed.
-  - **System Settings**: Background App Refresh, Low Power Mode, and system-level Location Services settings directly influence background wake cadence.
-  - **First Unlock After Reboot**: Storage is protected with `completeUntilFirstUserAuthentication`. Following a device reboot, the user must unlock the device at least once (via passcode or Face ID) before the app can read or write location records during background wakeups.
+1. Clone the repository to your local machine.
+2. Open `Footsteps.xcodeproj` in Xcode.
+3. Under **Footsteps Target > Signing & Capabilities**, select your **Personal Team** and ensure automatic signing is enabled.
+4. Set a unique **Bundle Identifier** (e.g. `com.<your-name>.Footsteps`).
+5. On your physical iPhone, enable Developer Mode via **Settings > Privacy & Security > Developer Mode** and reboot when prompted.
+6. Connect your iPhone via USB/Wi-Fi, select it as the run destination, and press **Run** (`Cmd + R`).
 
-## Verification & Testing
+## Controls
 
-### CLI Foundation Tests
-Run Foundation unit tests on any macOS host with the Swift CLI:
+- **Day Navigation**: Tap `<` or `>` in the navigation bar to navigate between calendar days (future day navigation is disabled).
+- **Date Status**: Header displays the currently active date, total recorded points for that day, and permission/tracking status.
+- **Heatmap View**: Pan and pinch to zoom over the MapKit canvas; density cells automatically scale alpha blending based on recorded point frequency.
+- **Location Permission Banner**: Tap the warning banner if location permissions are restricted to open iOS Settings.
+
+## Build
+
 ```bash
+# Run Foundation math and navigation test suites via CLI
 swiftc Tests/Task1FoundationTests.swift Footsteps/HeatmapGridMath.swift -o /tmp/task1_test && /tmp/task1_test
 swiftc Tests/Task2FoundationTests.swift Footsteps/HeatmapGridMath.swift -o /tmp/task2_test && /tmp/task2_test
 ```
 
-*Note: CLI-only environments without the full Xcode iOS SDK or Simulator cannot execute iOS build/runtime tests (UIKit/SwiftUI/MapKit UI rendering, CoreLocation hardware updates, and SwiftData SQLite integration).*
+Full app compilation and UI/MapKit test execution require Xcode with the iOS 17+ SDK (`Cmd + B` / `Cmd + U`).
 
-### Xcode Test Suite & Simulator Testing
-- **XCTest Suite**: Run unit and integration tests in Xcode (`Cmd + U`).
-- **Simulator Simulation**: Use Simulator menu **Features > Location > Freeway Drive** or **City Run** to simulate active movement and real-time heatmap updates.
+## Limitations
 
-### Manual Acceptance Checklist
-- [ ] **Permission Denial & Upgrade**: Confirm initial WhenInUse prompt, verify banner / settings navigation when permission is denied, and test upgrading permission to Always in iOS Settings.
-- [ ] **Data Persistence & Relaunch**: Record points, terminate the app (or restart in Xcode), relaunch, and confirm all historical points remain persisted in SwiftData storage.
-- [ ] **Day Navigation & Empty Days**: Navigate to past days, verify empty days render cleanly without stale overlays or crashes, and confirm next-day navigation is disabled on today/future dates.
-- [ ] **Heatmap Overlay Rendering**: Verify density cells scale intensity (alpha blending) correctly as location count increases in a cell.
-- [ ] **Locked Walk & Battery Observation**: Perform a physical walk with the device screen locked, confirm continuous background recording across locations, and monitor battery usage over extended tracking sessions.
+- **Source-Only Release**: Provided as an uncompiled source project intended for personal self-signed deployment; no prebuilt binaries or App Store distribution.
+- **User Force-Quit**: If the app is explicitly terminated from the iOS App Switcher, iOS suspends location delivery until the user manually relaunches the app.
+- **First Unlock After Reboot**: Due to on-disk data protection (`completeUntilFirstUserAuthentication`), the device must be unlocked at least once after reboot before background wakeups can read or write points.
+- **Unverified CLI Runtime**: Full iOS build, MapKit rendering, CoreLocation hardware updates, and locked-screen background walks are unverified in headless CLI environments without Xcode/Simulator runtime.
+- **Provisioning Expiry**: Personal free Apple Developer provisioning profiles expire every 7 days, requiring the app to be re-signed and redeployed from Xcode.
 
 ## License
 
-Licensed under the [MIT License](LICENSE).
+- Source code is licensed under the [MIT License](LICENSE).
+- App icon assets are adapted from Wikimedia Commons and licensed under [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/) — see [ATTRIBUTION.md](ATTRIBUTION.md).
