@@ -145,6 +145,7 @@ struct DailyTrackerView: View {
 
             // Map content with predicate-filtered SwiftData query
             DailyTrajectoryContainerView(selectedDate: selectedDate, selectedSegmentID: $selectedSegmentID)
+                .id(TrajectoryMath.dayInterval(for: selectedDate).start)
                 .edgesIgnoringSafeArea(.bottom)
         }
         .sheet(isPresented: $isSettingsPresented) {

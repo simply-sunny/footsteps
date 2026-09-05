@@ -103,6 +103,22 @@ final class UIAndMapTests: XCTestCase {
         XCTAssertEqual(emptyStateString, "No data for this day")
     }
 
+    func testNormalizedDayIdentity() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+
+        let morning = Date(timeIntervalSince1970: 1772956800) // 2026-03-08 08:00:00 UTC
+        let evening = Date(timeIntervalSince1970: 1772992800) // 2026-03-08 18:00:00 UTC
+        let nextDay = Date(timeIntervalSince1970: 1773043200) // 2026-03-09 08:00:00 UTC
+
+        let morningStart = TrajectoryMath.dayInterval(for: morning, calendar: calendar).start
+        let eveningStart = TrajectoryMath.dayInterval(for: evening, calendar: calendar).start
+        let nextDayStart = TrajectoryMath.dayInterval(for: nextDay, calendar: calendar).start
+
+        XCTAssertEqual(morningStart, eveningStart, "Same calendar day timestamps must produce identical view identity")
+        XCTAssertNotEqual(morningStart, nextDayStart, "Different calendar days must produce distinct view identities")
+    }
+
     func testNegativeCoordinatesAndAntimeridianPolyline() {
         let baseDate = Date(timeIntervalSince1970: 1772900000)
         let points = [
