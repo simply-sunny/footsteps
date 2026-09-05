@@ -116,20 +116,15 @@ final class UIAndMapTests: XCTestCase {
         XCTAssertGreaterThan(overlay.boundingMapRect.size.width, 0)
     }
 
-    func testDensityPolygonRendererAlpha() {
+    func testHeatmapOverlayRenderer() {
         let coordinator = HeatmapMapView.Coordinator()
         let mapView = MKMapView()
 
-        var coords = [
-            CLLocationCoordinate2D(latitude: 37.77, longitude: -122.41),
-            CLLocationCoordinate2D(latitude: 37.78, longitude: -122.41),
-            CLLocationCoordinate2D(latitude: 37.78, longitude: -122.40),
-            CLLocationCoordinate2D(latitude: 37.77, longitude: -122.40)
+        let cells = [
+            DensityCell(minLat: 37.77, maxLat: 37.78, minLon: -122.42, maxLon: -122.41, count: 5, intensity: 1.0)
         ]
-        let polygon = DensityPolygon(coordinates: &coords, count: 4)
-        polygon.intensity = 0.5
-
-        let renderer = coordinator.mapView(mapView, rendererFor: polygon)
-        XCTAssertTrue(renderer is MKPolygonRenderer)
+        let overlay = HeatmapOverlay(cells: cells)
+        let renderer = coordinator.mapView(mapView, rendererFor: overlay)
+        XCTAssertTrue(renderer is HeatmapOverlayRenderer)
     }
 }

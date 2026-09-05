@@ -1,10 +1,6 @@
 import SwiftUI
 import MapKit
 
-final class DensityPolygon: MKPolygon {
-    var intensity: Double = 1.0
-}
-
 final class HeatmapOverlay: NSObject, MKOverlay {
     let coordinate: CLLocationCoordinate2D
     let boundingMapRect: MKMapRect
@@ -141,14 +137,6 @@ struct HeatmapMapView: UIViewRepresentable {
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
             if let heatmap = overlay as? HeatmapOverlay {
                 return HeatmapOverlayRenderer(overlay: heatmap)
-            }
-            if let densityPoly = overlay as? DensityPolygon {
-                let renderer = MKPolygonRenderer(polygon: densityPoly)
-                let alpha = min(max(densityPoly.intensity * 0.7 + 0.15, 0.2), 0.85)
-                renderer.fillColor = UIColor.systemBlue.withAlphaComponent(alpha)
-                renderer.strokeColor = UIColor.systemBlue.withAlphaComponent(min(alpha + 0.2, 1.0))
-                renderer.lineWidth = 1.0
-                return renderer
             }
             return MKOverlayRenderer(overlay: overlay)
         }
