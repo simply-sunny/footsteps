@@ -3,28 +3,37 @@
 .AppleDouble
 .LSOverride
 Icon
+._*
 
-# Xcode
+# Xcode & Build
 build/
-*.pbxuser
-!default.pbxuser
-*.mode1v3
-!default.mode1v3
-*.mode2v3
-!default.mode2v3
-*.perspectivev3
-!default.perspectivev3
+DerivedData/
 xcuserdata/
+*.xcuserstate
 *.xccheckout
 *.moved-aside
-DerivedData/
 *.hmap
 *.ipa
-*.xcuserstate
 *.xcodeproj/project.xcworkspace/
 project.xcworkspace/
+*.pbxuser
+*.mode1v3
+*.mode2v3
+*.perspectivev3
 
-# Swift Package Manager & CLI build artifacts
+# Swift Package Manager & Editor backups
 .build/
 *.swp
 *~
+
+# Local database & app artifacts
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.sqlite-journal
+*.db
+*.db-wal
+*.db-shm
+
+# Agent private files & artifacts
+.pi/
