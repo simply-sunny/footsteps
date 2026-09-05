@@ -7,13 +7,13 @@
 
 # Footsteps
 
-A minimal, local-first iOS 17+ app that passively records device location and renders a daily 2D density heatmap.
+A minimal, local-first iOS 17+ app that passively records device location and renders real daily trajectory segments.
 
 ## Features
 
 - **Passive Background Tracking**: Continuous location monitoring (100m accuracy, 50m distance filter) with significant location change wakeups.
 - **Local-First Storage**: Persistent location point history stored locally on-device using SwiftData with encrypted file protection (`completeUntilFirstUserAuthentication`).
-- **2D Density Heatmap Overlay**: Custom MapKit overlay (`HeatmapOverlay` and `HeatmapOverlayRenderer`) binning points into density grid cells with dynamic alpha blending.
+- **Segmented Trajectory Overlay**: Pure derived trajectory segmentation with MapKit polyline overlays (`SegmentPolyline`), discontinuity detection, and interactive segment selection.
 - **Day-by-Day Navigation**: Daily tracker UI with date stepping, calendar day boundary calculations, and future date navigation guards.
 - **Zero Third-Party Dependencies**: Pure Apple system frameworks (`SwiftUI`, `SwiftData`, `MapKit`, `CoreLocation`, `UIKit`).
 - **Native iOS 18 Dark Appearance Icon**: Configured asset catalog supporting both default and native iOS 18 dark appearance icon styles.
@@ -38,15 +38,16 @@ A minimal, local-first iOS 17+ app that passively records device location and re
 
 - **Day Navigation**: Tap `<` or `>` in the navigation bar to navigate between calendar days (future day navigation is disabled).
 - **Date Status**: Header displays the currently active date, total recorded points for that day, and permission/tracking status.
-- **Heatmap View**: Pan and pinch to zoom over the MapKit canvas; density cells automatically scale alpha blending based on recorded point frequency.
+- **Trajectory View**: Pan and pinch to zoom over the MapKit canvas; tap individual trajectory segments to highlight them.
+- **User Tracking**: Tap the native tracking button to toggle location tracking modes.
 - **Location Permission Banner**: Tap the warning banner if location permissions are restricted to open iOS Settings.
 
 ## Build
 
 ```bash
-# Run Foundation math and navigation test suites via CLI
-swiftc Tests/Task1FoundationTests.swift Footsteps/HeatmapGridMath.swift -o /tmp/task1_test && /tmp/task1_test
-swiftc Tests/Task2FoundationTests.swift Footsteps/HeatmapGridMath.swift -o /tmp/task2_test && /tmp/task2_test
+# Run Foundation math, segmentation, and navigation test suites via CLI
+swiftc Tests/Task1FoundationTests.swift Footsteps/TrajectoryMath.swift -o /tmp/task1_test && /tmp/task1_test
+swiftc Tests/Task2FoundationTests.swift Footsteps/TrajectoryMath.swift -o /tmp/task2_test && /tmp/task2_test
 ```
 
 Full app compilation and UI/MapKit test execution require Xcode with the iOS 17+ SDK (`Cmd + B` / `Cmd + U`).

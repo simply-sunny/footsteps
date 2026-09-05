@@ -10,8 +10,8 @@
 		100000000000000000000041 /* FootstepsApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000011 /* FootstepsApp.swift */; };
 		100000000000000000000042 /* LocationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000012 /* LocationManager.swift */; };
 		100000000000000000000043 /* LocationPoint.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000013 /* LocationPoint.swift */; };
-		100000000000000000000044 /* HeatmapGridMath.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000014 /* HeatmapGridMath.swift */; };
-		100000000000000000000045 /* HeatmapMapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000016 /* HeatmapMapView.swift */; };
+		100000000000000000000044 /* TrajectoryMath.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000014 /* TrajectoryMath.swift */; };
+		100000000000000000000045 /* TrajectoryMapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000016 /* TrajectoryMapView.swift */; };
 		100000000000000000000046 /* DailyTrackerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000017 /* DailyTrackerView.swift */; };
 		100000000000000000000047 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000018 /* Assets.xcassets */; };
 		100000000000000000000051 /* LocationAndStorageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000021 /* LocationAndStorageTests.swift */; };
@@ -32,9 +32,9 @@
 		100000000000000000000011 /* FootstepsApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FootstepsApp.swift; sourceTree = "<group>"; };
 		100000000000000000000012 /* LocationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationManager.swift; sourceTree = "<group>"; };
 		100000000000000000000013 /* LocationPoint.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationPoint.swift; sourceTree = "<group>"; };
-		100000000000000000000014 /* HeatmapGridMath.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeatmapGridMath.swift; sourceTree = "<group>"; };
+		100000000000000000000014 /* TrajectoryMath.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrajectoryMath.swift; sourceTree = "<group>"; };
 		100000000000000000000015 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		100000000000000000000016 /* HeatmapMapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeatmapMapView.swift; sourceTree = "<group>"; };
+		100000000000000000000016 /* TrajectoryMapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrajectoryMapView.swift; sourceTree = "<group>"; };
 		100000000000000000000017 /* DailyTrackerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyTrackerView.swift; sourceTree = "<group>"; };
 		100000000000000000000018 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		100000000000000000000021 /* LocationAndStorageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationAndStorageTests.swift; sourceTree = "<group>"; };
@@ -78,8 +78,8 @@
 				100000000000000000000011 /* FootstepsApp.swift */,
 				100000000000000000000012 /* LocationManager.swift */,
 				100000000000000000000013 /* LocationPoint.swift */,
-				100000000000000000000014 /* HeatmapGridMath.swift */,
-				100000000000000000000016 /* HeatmapMapView.swift */,
+				100000000000000000000014 /* TrajectoryMath.swift */,
+				100000000000000000000016 /* TrajectoryMapView.swift */,
 				100000000000000000000017 /* DailyTrackerView.swift */,
 				100000000000000000000018 /* Assets.xcassets */,
 				100000000000000000000015 /* Info.plist */,
@@ -209,8 +209,8 @@
 				100000000000000000000041 /* FootstepsApp.swift in Sources */,
 				100000000000000000000042 /* LocationManager.swift in Sources */,
 				100000000000000000000043 /* LocationPoint.swift in Sources */,
-				100000000000000000000044 /* HeatmapGridMath.swift in Sources */,
-				100000000000000000000045 /* HeatmapMapView.swift in Sources */,
+				100000000000000000000044 /* TrajectoryMath.swift in Sources */,
+				100000000000000000000045 /* TrajectoryMapView.swift in Sources */,
 				100000000000000000000046 /* DailyTrackerView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

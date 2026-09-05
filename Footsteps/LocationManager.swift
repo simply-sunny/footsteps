@@ -59,7 +59,7 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
 
     nonisolated func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         let validLocations = locations.filter { loc in
-            HeatmapGridMath.isValid(
+            TrajectoryMath.isValid(
                 latitude: loc.coordinate.latitude,
                 longitude: loc.coordinate.longitude,
                 horizontalAccuracy: loc.horizontalAccuracy

@@ -16,122 +16,134 @@ struct Task2FoundationTests {
     }
 
     static func main() {
-        print("Running Task 2 Foundation Tests...")
+        print("Running Task 2 Foundation Tests (Trajectory Segmentation, Discontinuities, Deterministic IDs)...")
 
-        // 1. Grid Bucketing - Empty List
-        let emptyCells = HeatmapGridMath.computeDensityGrid(coordinates: [])
-        assertTrue(emptyCells.isEmpty, "Empty coordinates must produce empty cells")
+        let baseDate = Date(timeIntervalSince1970: 1772900000)
 
-        // 2. Grid Bucketing - Single Point
-        let singlePoint = [(latitude: 37.7749, longitude: -122.4194)]
-        let singleCells = HeatmapGridMath.computeDensityGrid(coordinates: singlePoint, cellSizeDegrees: 0.001)
-        assertTrue(singleCells.count == 1, "Single point must produce 1 cell")
-        assertTrue(singleCells[0].count == 1, "Single cell count must be 1")
-        assertTrue(singleCells[0].intensity == 1.0, "Single cell intensity must be 1.0")
-        assertTrue(singleCells[0].minLat <= 37.7749 && singleCells[0].maxLat >= 37.7749, "Point lat must be within cell bounds")
-        assertTrue(singleCells[0].minLon <= -122.4194 && singleCells[0].maxLon >= -122.4194, "Point lon must be within cell bounds")
+        // 1. Empty & Single Point Trajectories
+        let emptySegs = TrajectoryMath.segment(points: [])
+        assertTrue(emptySegs.isEmpty, "Empty input must return empty segments")
 
-        // 3. Multi-Point Aggregation & Intensity Scaling
-        let multiPoints = [
-            (latitude: 37.7741, longitude: -122.4191), // Cell A
-            (latitude: 37.7742, longitude: -122.4192), // Cell A
-            (latitude: 37.7743, longitude: -122.4193), // Cell A
-            (latitude: 37.7800, longitude: -122.4100)  // Cell B
+        let singlePoint = [
+            TrajectoryPoint(latitude: 37.7749, longitude: -122.4194, timestamp: baseDate, horizontalAccuracy: 10.0)
         ]
-        let multiCells = HeatmapGridMath.computeDensityGrid(coordinates: multiPoints, cellSizeDegrees: 0.001)
-        assertTrue(multiCells.count == 2, "Should aggregate into 2 distinct cells")
+        let singleSegs = TrajectoryMath.segment(points: singlePoint)
+        assertTrue(singleSegs.isEmpty, "Single point trajectory must return empty segments (>= 2 points required)")
 
-        let cellA = multiCells.first(where: { $0.count == 3 })
-        let cellB = multiCells.first(where: { $0.count == 1 })
-        assertTrue(cellA != nil, "Cell A with count 3 must exist")
-        assertTrue(cellB != nil, "Cell B with count 1 must exist")
-        assertTrue(cellA!.intensity == 1.0, "Max density cell must have intensity 1.0")
-        assertTrue(abs(cellB!.intensity - (1.0 / 3.0)) < 0.0001, "Cell B intensity must be proportional (1/3)")
-
-        // 4. Negative Coordinates (Southern / Western hemispheres)
-        let southernWesternPoints = [
-            (latitude: -33.8688, longitude: 151.2093), // Sydney
-            (latitude: -33.8689, longitude: 151.2094), // Sydney same cell
-            (latitude: -22.9068, longitude: -43.1729)  // Rio de Janeiro
+        // 2. Continuous Trajectory (No Discontinuities)
+        let continuousPoints = [
+            TrajectoryPoint(latitude: 37.7741, longitude: -122.4191, timestamp: baseDate, horizontalAccuracy: 10.0),
+            TrajectoryPoint(latitude: 37.7742, longitude: -122.4192, timestamp: baseDate.addingTimeInterval(30), horizontalAccuracy: 10.0),
+            TrajectoryPoint(latitude: 37.7743, longitude: -122.4193, timestamp: baseDate.addingTimeInterval(60), horizontalAccuracy: 10.0),
+            TrajectoryPoint(latitude: 37.7744, longitude: -122.4194, timestamp: baseDate.addingTimeInterval(90), horizontalAccuracy: 10.0)
         ]
-        let swCells = HeatmapGridMath.computeDensityGrid(coordinates: southernWesternPoints, cellSizeDegrees: 0.001)
-        assertTrue(swCells.count == 2, "Should aggregate into 2 cells for southern/western coords")
-        for cell in swCells {
-            assertTrue(cell.minLat < cell.maxLat, "minLat must be strictly less than maxLat for negative coords")
-            assertTrue(cell.minLon < cell.maxLon, "minLon must be strictly less than maxLon for negative coords")
-        }
+        let continuousSegs = TrajectoryMath.segment(points: continuousPoints)
+        assertTrue(continuousSegs.count == 1, "Continuous points should produce exactly 1 segment")
+        assertTrue(continuousSegs[0].points.count == 4, "Segment should contain all 4 points")
+        assertTrue(continuousSegs[0].startDate == baseDate, "startDate should match first point")
+        assertTrue(continuousSegs[0].endDate == baseDate.addingTimeInterval(90), "endDate should match last point")
+        assertTrue(continuousSegs[0].duration == 90.0, "duration should be 90 seconds")
+        assertTrue(continuousSegs[0].distanceMeters > 0.0, "distanceMeters should be greater than 0")
 
-        // 5. Boundary & Pole Edge Handling
-        let poleAndBoundaryPoints = [
-            (latitude: 90.0, longitude: 180.0),
-            (latitude: -90.0, longitude: -180.0),
-            (latitude: 0.0, longitude: 0.0)
+        // 3. Discontinuity: Time Gap > 5 minutes (300s)
+        let timeGapPoints = [
+            // Segment 1 (2 points)
+            TrajectoryPoint(latitude: 37.7741, longitude: -122.4191, timestamp: baseDate, horizontalAccuracy: 10.0),
+            TrajectoryPoint(latitude: 37.7742, longitude: -122.4192, timestamp: baseDate.addingTimeInterval(30), horizontalAccuracy: 10.0),
+            // Gap of 301 seconds (> 300s threshold)
+            // Segment 2 (2 points)
+            TrajectoryPoint(latitude: 37.7743, longitude: -122.4193, timestamp: baseDate.addingTimeInterval(331), horizontalAccuracy: 10.0),
+            TrajectoryPoint(latitude: 37.7744, longitude: -122.4194, timestamp: baseDate.addingTimeInterval(360), horizontalAccuracy: 10.0)
         ]
-        let boundaryCells = HeatmapGridMath.computeDensityGrid(coordinates: poleAndBoundaryPoints, cellSizeDegrees: 0.001)
-        assertTrue(boundaryCells.count == 3, "Boundary coordinates must bucket cleanly")
-        for cell in boundaryCells {
-            assertTrue(cell.minLat >= -90.0 && cell.maxLat <= 90.0, "Latitude must stay within [-90, 90]")
-            assertTrue(cell.minLon >= -180.0 && cell.maxLon <= 180.0, "Longitude must stay within [-180, 180]")
-        }
+        let timeGapSegs = TrajectoryMath.segment(points: timeGapPoints)
+        assertTrue(timeGapSegs.count == 2, "301s time gap should split into 2 segments (actual: \(timeGapSegs.count))")
+        assertTrue(timeGapSegs[0].points.count == 2, "First segment must have 2 points")
+        assertTrue(timeGapSegs[1].points.count == 2, "Second segment must have 2 points")
 
-        // 6. Invalid & Nonfinite Coordinate Filtering
+        // 4. Discontinuity: Speed > 50 m/s (180 km/h)
+        // Distance ~2,000m in 10s -> speed = 200 m/s (> 50 m/s)
+        let speedPoints = [
+            // Segment 1 (2 points)
+            TrajectoryPoint(latitude: 37.7741, longitude: -122.4191, timestamp: baseDate, horizontalAccuracy: 10.0),
+            TrajectoryPoint(latitude: 37.7742, longitude: -122.4192, timestamp: baseDate.addingTimeInterval(30), horizontalAccuracy: 10.0),
+            // High speed jump (latitude jump ~0.02 deg is ~2.2 km in 10 seconds = 220 m/s)
+            // Segment 2 (2 points)
+            TrajectoryPoint(latitude: 37.7940, longitude: -122.4192, timestamp: baseDate.addingTimeInterval(40), horizontalAccuracy: 10.0),
+            TrajectoryPoint(latitude: 37.7941, longitude: -122.4193, timestamp: baseDate.addingTimeInterval(70), horizontalAccuracy: 10.0)
+        ]
+        let speedSegs = TrajectoryMath.segment(points: speedPoints)
+        assertTrue(speedSegs.count == 2, "Speed > 50 m/s should split into 2 segments (actual: \(speedSegs.count))")
+
+        // 5. Discontinuity: Distance Jump > 10 km (even if time delta allows moderate speed)
+        // SF to San Jose (~70km in 2000s = 35 m/s < 50 m/s, but dist > 10km)
+        let distanceJumpPoints = [
+            TrajectoryPoint(latitude: 37.7749, longitude: -122.4194, timestamp: baseDate, horizontalAccuracy: 10.0),
+            TrajectoryPoint(latitude: 37.7750, longitude: -122.4195, timestamp: baseDate.addingTimeInterval(30), horizontalAccuracy: 10.0),
+            // San Jose coordinate (~70km away) at 200s gap (dist > 10km)
+            TrajectoryPoint(latitude: 37.3382, longitude: -121.8863, timestamp: baseDate.addingTimeInterval(230), horizontalAccuracy: 10.0),
+            TrajectoryPoint(latitude: 37.3383, longitude: -121.8864, timestamp: baseDate.addingTimeInterval(260), horizontalAccuracy: 10.0)
+        ]
+        let distSegs = TrajectoryMath.segment(points: distanceJumpPoints)
+        assertTrue(distSegs.count == 2, "Distance jump > 10km should split into 2 segments (actual: \(distSegs.count))")
+
+        // 6. Discontinuity: Nonpositive Time Delta (dt <= 0)
+        let nonpositivePoints = [
+            TrajectoryPoint(latitude: 37.7741, longitude: -122.4191, timestamp: baseDate, horizontalAccuracy: 10.0),
+            TrajectoryPoint(latitude: 37.7742, longitude: -122.4192, timestamp: baseDate.addingTimeInterval(30), horizontalAccuracy: 10.0),
+            // Duplicate timestamp or backwards timestamp (out-of-order resolved or duplicate dt=0)
+            TrajectoryPoint(latitude: 37.7743, longitude: -122.4193, timestamp: baseDate.addingTimeInterval(30), horizontalAccuracy: 10.0),
+            TrajectoryPoint(latitude: 37.7744, longitude: -122.4194, timestamp: baseDate.addingTimeInterval(60), horizontalAccuracy: 10.0)
+        ]
+        let nonpositiveSegs = TrajectoryMath.segment(points: nonpositivePoints)
+        assertTrue(nonpositiveSegs.count == 2, "Nonpositive time delta (dt=0) should split into 2 segments")
+
+        // 7. Dropping Singleton Points (Segment < 2 points)
+        // 3 points: p1 -> p2 (continuous), p3 isolated after 10-minute gap
+        let singletonPoints = [
+            TrajectoryPoint(latitude: 37.7741, longitude: -122.4191, timestamp: baseDate, horizontalAccuracy: 10.0),
+            TrajectoryPoint(latitude: 37.7742, longitude: -122.4192, timestamp: baseDate.addingTimeInterval(30), horizontalAccuracy: 10.0),
+            TrajectoryPoint(latitude: 37.7743, longitude: -122.4193, timestamp: baseDate.addingTimeInterval(700), horizontalAccuracy: 10.0)
+        ]
+        let singletonSegs = TrajectoryMath.segment(points: singletonPoints)
+        assertTrue(singletonSegs.count == 1, "Isolated 3rd point must be dropped as singleton, yielding 1 segment")
+        assertTrue(singletonSegs[0].points.count == 2, "Resulting segment must have 2 points")
+
+        // 8. Filtering Unusable Accuracy & Invalid Coordinates
         let mixedPoints = [
-            (latitude: 37.7741, longitude: -122.4191),
-            (latitude: 100.0, longitude: -122.4191), // Invalid lat
-            (latitude: 37.7741, longitude: 200.0),   // Invalid lon
-            (latitude: Double.nan, longitude: 0.0),   // NaN
-            (latitude: 0.0, longitude: Double.infinity) // Inf
+            TrajectoryPoint(latitude: 37.7741, longitude: -122.4191, timestamp: baseDate, horizontalAccuracy: 10.0),
+            TrajectoryPoint(latitude: 37.7742, longitude: -122.4192, timestamp: baseDate.addingTimeInterval(30), horizontalAccuracy: 250.0), // Accuracy > 200m rejected
+            TrajectoryPoint(latitude: Double.nan, longitude: -122.4193, timestamp: baseDate.addingTimeInterval(60), horizontalAccuracy: 10.0), // NaN rejected
+            TrajectoryPoint(latitude: 100.0, longitude: -122.4193, timestamp: baseDate.addingTimeInterval(90), horizontalAccuracy: 10.0), // Out of range lat rejected
+            TrajectoryPoint(latitude: 37.7743, longitude: -122.4193, timestamp: baseDate.addingTimeInterval(120), horizontalAccuracy: -1.0), // Negative accuracy rejected
+            TrajectoryPoint(latitude: 37.7744, longitude: -122.4194, timestamp: baseDate.addingTimeInterval(150), horizontalAccuracy: 50.0)
         ]
-        let filteredCells = HeatmapGridMath.computeDensityGrid(coordinates: mixedPoints, cellSizeDegrees: 0.001)
-        assertTrue(filteredCells.count == 1, "Invalid coordinates must be excluded from density grid")
-        assertTrue(filteredCells[0].count == 1, "Only 1 valid coordinate should be counted")
+        // Valid points remaining: p0 (t=0) and p5 (t=150s, dt=150s, dist ~50m -> continuous)
+        let filteredSegs = TrajectoryMath.segment(points: mixedPoints)
+        assertTrue(filteredSegs.count == 1, "Invalid/inaccurate points must be filtered before segmentation")
+        assertTrue(filteredSegs[0].points.count == 2, "Filtered segment should retain the 2 valid points")
 
-        // 7. DST 23-Hour Day (Spring Forward)
-        var calendar = Calendar(identifier: .gregorian)
-        guard let tz = TimeZone(identifier: "America/New_York") else {
-            fatalError("TimeZone America/New_York missing")
-        }
-        calendar.timeZone = tz
+        // 9. Chronological Sorting of Unsorted Input
+        let unsortedPoints = [
+            TrajectoryPoint(latitude: 37.7743, longitude: -122.4193, timestamp: baseDate.addingTimeInterval(60), horizontalAccuracy: 10.0),
+            TrajectoryPoint(latitude: 37.7741, longitude: -122.4191, timestamp: baseDate, horizontalAccuracy: 10.0),
+            TrajectoryPoint(latitude: 37.7742, longitude: -122.4192, timestamp: baseDate.addingTimeInterval(30), horizontalAccuracy: 10.0)
+        ]
+        let sortedSegs = TrajectoryMath.segment(points: unsortedPoints)
+        assertTrue(sortedSegs.count == 1, "Unsorted input points must be sorted chronologically and segmented")
+        assertTrue(sortedSegs[0].points[0].timestamp == baseDate, "First point in segment must have earliest timestamp")
+        assertTrue(sortedSegs[0].points[2].timestamp == baseDate.addingTimeInterval(60), "Last point must have latest timestamp")
 
-        var springComponents = DateComponents()
-        springComponents.year = 2026
-        springComponents.month = 3
-        springComponents.day = 8
-        springComponents.hour = 12
-        let springDate = calendar.date(from: springComponents)!
-        let springInterval = HeatmapGridMath.dayInterval(for: springDate, calendar: calendar)
-        let springDuration = springInterval.end.timeIntervalSince(springInterval.start)
-        assertTrue(springDuration == 82800, "DST spring forward day must be exactly 23 hours (82800s)")
-        assertTrue(springInterval.contains(springDate), "Spring interval must contain test date")
+        // 10. Deterministic Stable ID Generation
+        let run1 = TrajectoryMath.segment(points: continuousPoints)
+        let run2 = TrajectoryMath.segment(points: continuousPoints)
+        assertTrue(run1.count == 1 && run2.count == 1, "Both segmentation runs should produce 1 segment")
+        assertTrue(run1[0].id == run2[0].id, "Segment IDs must be completely deterministic across runs (ID: \(run1[0].id))")
+        assertFalse(run1[0].id.isEmpty, "Segment ID must not be empty")
 
-        // 8. DST 25-Hour Day (Fall Back)
-        var fallComponents = DateComponents()
-        fallComponents.year = 2026
-        fallComponents.month = 11
-        fallComponents.day = 1
-        fallComponents.hour = 12
-        let fallDate = calendar.date(from: fallComponents)!
-        let fallInterval = HeatmapGridMath.dayInterval(for: fallDate, calendar: calendar)
-        let fallDuration = fallInterval.end.timeIntervalSince(fallInterval.start)
-        assertTrue(fallDuration == 90000, "DST fall back day must be exactly 25 hours (90000s)")
-        assertTrue(fallInterval.contains(fallDate), "Fall interval must contain test date")
-
-        // 9. Day Navigation & Today/Future Guard
-        let fixedNow = springDate // simulate 'now' as 2026-03-08 12:00:00
-        let prevFromNow = HeatmapGridMath.previousDay(from: fixedNow, calendar: calendar)
-        let nextFromPrev = HeatmapGridMath.nextDay(from: prevFromNow, calendar: calendar)
-
-        assertTrue(calendar.isDate(prevFromNow, inSameDayAs: calendar.date(byAdding: .day, value: -1, to: fixedNow)!), "previousDay must decrement by 1 day")
-        assertTrue(calendar.isDate(nextFromPrev, inSameDayAs: fixedNow), "nextDay must return to original day")
-
-        // canNavigateNext guard:
-        // Yesterday -> can navigate next
-        assertTrue(HeatmapGridMath.canNavigateNext(from: prevFromNow, calendar: calendar, now: fixedNow), "Can navigate next from yesterday")
-        // Today -> CANNOT navigate next
-        assertFalse(HeatmapGridMath.canNavigateNext(from: fixedNow, calendar: calendar, now: fixedNow), "Cannot navigate next when on today")
-        // Tomorrow / Future -> CANNOT navigate next (future guard)
-        let tomorrow = calendar.date(byAdding: .day, value: 1, to: fixedNow)!
-        assertFalse(HeatmapGridMath.canNavigateNext(from: tomorrow, calendar: calendar, now: fixedNow), "Cannot navigate next from future day")
+        // Distinct segments must have distinct IDs
+        let twoSegs = TrajectoryMath.segment(points: timeGapPoints)
+        assertTrue(twoSegs.count == 2, "Should have 2 segments")
+        assertTrue(twoSegs[0].id != twoSegs[1].id, "Distinct segments must have distinct IDs")
 
         if failureCount > 0 {
             print("Task 2 Foundation Tests FAILED with \(failureCount) failures.")

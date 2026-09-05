@@ -7,6 +7,7 @@ struct DailyTrackerView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var selectedDate: Date = Date()
     @State private var currentDateReference: Date = Date()
+    @State private var selectedSegmentID: String? = nil
 
     private var formattedDate: String {
         let formatter = DateFormatter()
@@ -16,7 +17,7 @@ struct DailyTrackerView: View {
     }
 
     private var canGoNext: Bool {
-        HeatmapGridMath.canNavigateNext(from: selectedDate, now: currentDateReference)
+        TrajectoryMath.canNavigateNext(from: selectedDate, now: currentDateReference)
     }
 
     var body: some View {
@@ -100,7 +101,8 @@ struct DailyTrackerView: View {
             // Date Navigation Header
             HStack {
                 Button(action: {
-                    selectedDate = HeatmapGridMath.previousDay(from: selectedDate)
+                    selectedDate = TrajectoryMath.previousDay(from: selectedDate)
+                    selectedSegmentID = nil
                 }) {
                     Image(systemName: "chevron.left")
                         .font(.headline)
@@ -117,7 +119,8 @@ struct DailyTrackerView: View {
 
                 Button(action: {
                     if canGoNext {
-                        selectedDate = HeatmapGridMath.nextDay(from: selectedDate)
+                        selectedDate = TrajectoryMath.nextDay(from: selectedDate)
+                        selectedSegmentID = nil
                     }
                 }) {
                     Image(systemName: "chevron.right")
@@ -132,10 +135,10 @@ struct DailyTrackerView: View {
             .background(Color(UIColor.secondarySystemBackground))
 
             // Map content with predicate-filtered SwiftData query
-            DailyHeatmapContainerView(selectedDate: selectedDate)
+            DailyTrajectoryContainerView(selectedDate: selectedDate, selectedSegmentID: $selectedSegmentID)
                 .edgesIgnoringSafeArea(.bottom)
         }
-        .onChange(of: scenePhase) { newPhase in
+        .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .active {
                 refreshCurrentDate()
             }
@@ -149,20 +152,22 @@ struct DailyTrackerView: View {
         let now = Date()
         currentDateReference = now
         // If viewing today, stay locked to today across midnight
-        if HeatmapGridMath.isToday(selectedDate, now: now) {
+        if TrajectoryMath.isToday(selectedDate, now: now) {
             selectedDate = now
         }
     }
 }
 
 /// Dynamic SwiftData container that executes a predicate query strictly for the selected calendar day.
-struct DailyHeatmapContainerView: View {
+struct DailyTrajectoryContainerView: View {
     let selectedDate: Date
+    @Binding var selectedSegmentID: String?
     @Query private var dayPoints: [LocationPoint]
 
-    init(selectedDate: Date, calendar: Calendar = .current) {
+    init(selectedDate: Date, selectedSegmentID: Binding<String?> = .constant(nil), calendar: Calendar = .current) {
         self.selectedDate = selectedDate
-        let interval = HeatmapGridMath.dayInterval(for: selectedDate, calendar: calendar)
+        self._selectedSegmentID = selectedSegmentID
+        let interval = TrajectoryMath.dayInterval(for: selectedDate, calendar: calendar)
         let start = interval.start
         let end = interval.end
 
@@ -176,6 +181,15 @@ struct DailyHeatmapContainerView: View {
     }
 
     var body: some View {
-        HeatmapMapView(points: dayPoints, selectedDate: selectedDate)
+        let trajectoryPoints = dayPoints.map {
+            TrajectoryPoint(
+                latitude: $0.latitude,
+                longitude: $0.longitude,
+                timestamp: $0.timestamp,
+                horizontalAccuracy: $0.horizontalAccuracy
+            )
+        }
+        let segments = TrajectoryMath.segment(points: trajectoryPoints)
+        TrajectoryMapView(segments: segments, selectedSegmentID: $selectedSegmentID)
     }
 }

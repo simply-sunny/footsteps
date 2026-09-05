@@ -64,25 +64,32 @@ final class LocationAndStorageTests: XCTestCase {
     func testDirectoryFileProtection() throws {
         let attributes = try FileManager.default.attributesOfItem(atPath: tempDirectoryURL.path)
         let protection = attributes[FileAttributeKey.protectionKey] as? FileProtectionType
+        #if targetEnvironment(simulator)
+        // Simulator filesystem (APFS on macOS) does not retain iOS file protection attributes.
+        XCTAssertTrue(protection == nil || protection == FileProtectionType.completeUntilFirstUserAuthentication)
+        #else
         XCTAssertEqual(protection, FileProtectionType.completeUntilFirstUserAuthentication)
+        #endif
     }
 
     func testCoordinateValidation() {
-        XCTAssertTrue(HeatmapGridMath.isValid(latitude: 37.7749, longitude: -122.4194, horizontalAccuracy: 5.0))
-        XCTAssertTrue(HeatmapGridMath.isValid(latitude: -90.0, longitude: -180.0, horizontalAccuracy: 0.0))
-        XCTAssertTrue(HeatmapGridMath.isValid(latitude: 90.0, longitude: 180.0, horizontalAccuracy: 100.0))
+        XCTAssertTrue(TrajectoryMath.isValid(latitude: 37.7749, longitude: -122.4194, horizontalAccuracy: 5.0))
+        XCTAssertTrue(TrajectoryMath.isValid(latitude: -90.0, longitude: -180.0, horizontalAccuracy: 0.0))
+        XCTAssertTrue(TrajectoryMath.isValid(latitude: 90.0, longitude: 180.0, horizontalAccuracy: 100.0))
+        XCTAssertTrue(TrajectoryMath.isValid(latitude: 37.7749, longitude: -122.4194, horizontalAccuracy: 200.0))
 
-        XCTAssertFalse(HeatmapGridMath.isValid(latitude: 90.001, longitude: 0.0, horizontalAccuracy: 5.0))
-        XCTAssertFalse(HeatmapGridMath.isValid(latitude: -90.001, longitude: 0.0, horizontalAccuracy: 5.0))
-        XCTAssertFalse(HeatmapGridMath.isValid(latitude: 0.0, longitude: 180.001, horizontalAccuracy: 5.0))
-        XCTAssertFalse(HeatmapGridMath.isValid(latitude: 0.0, longitude: -180.001, horizontalAccuracy: 5.0))
-        XCTAssertFalse(HeatmapGridMath.isValid(latitude: 37.77, longitude: -122.41, horizontalAccuracy: -1.0))
+        XCTAssertFalse(TrajectoryMath.isValid(latitude: 90.001, longitude: 0.0, horizontalAccuracy: 5.0))
+        XCTAssertFalse(TrajectoryMath.isValid(latitude: -90.001, longitude: 0.0, horizontalAccuracy: 5.0))
+        XCTAssertFalse(TrajectoryMath.isValid(latitude: 0.0, longitude: 180.001, horizontalAccuracy: 5.0))
+        XCTAssertFalse(TrajectoryMath.isValid(latitude: 0.0, longitude: -180.001, horizontalAccuracy: 5.0))
+        XCTAssertFalse(TrajectoryMath.isValid(latitude: 37.77, longitude: -122.41, horizontalAccuracy: -1.0))
+        XCTAssertFalse(TrajectoryMath.isValid(latitude: 37.77, longitude: -122.41, horizontalAccuracy: 200.1))
 
-        XCTAssertFalse(HeatmapGridMath.isValid(latitude: Double.nan, longitude: 0.0, horizontalAccuracy: 5.0))
-        XCTAssertFalse(HeatmapGridMath.isValid(latitude: 0.0, longitude: Double.nan, horizontalAccuracy: 5.0))
-        XCTAssertFalse(HeatmapGridMath.isValid(latitude: 0.0, longitude: 0.0, horizontalAccuracy: Double.nan))
-        XCTAssertFalse(HeatmapGridMath.isValid(latitude: Double.infinity, longitude: 0.0, horizontalAccuracy: 5.0))
-        XCTAssertFalse(HeatmapGridMath.isValid(latitude: 0.0, longitude: Double.infinity, horizontalAccuracy: 5.0))
-        XCTAssertFalse(HeatmapGridMath.isValid(latitude: 0.0, longitude: 0.0, horizontalAccuracy: Double.infinity))
+        XCTAssertFalse(TrajectoryMath.isValid(latitude: Double.nan, longitude: 0.0, horizontalAccuracy: 5.0))
+        XCTAssertFalse(TrajectoryMath.isValid(latitude: 0.0, longitude: Double.nan, horizontalAccuracy: 5.0))
+        XCTAssertFalse(TrajectoryMath.isValid(latitude: 0.0, longitude: 0.0, horizontalAccuracy: Double.nan))
+        XCTAssertFalse(TrajectoryMath.isValid(latitude: Double.infinity, longitude: 0.0, horizontalAccuracy: 5.0))
+        XCTAssertFalse(TrajectoryMath.isValid(latitude: 0.0, longitude: Double.infinity, horizontalAccuracy: 5.0))
+        XCTAssertFalse(TrajectoryMath.isValid(latitude: 0.0, longitude: 0.0, horizontalAccuracy: Double.infinity))
     }
 }
