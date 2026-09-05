@@ -6,13 +6,22 @@ import Combine
 @MainActor
 final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     static let shared = LocationManager()
+    static let trackingEnabledKey = "isBackgroundTrackingEnabled"
 
     @Published var authorizationStatus: CLAuthorizationStatus = .notDetermined
     @Published var lastError: String? = nil
+    @Published private(set) var isTrackingActive: Bool = false
 
     private let locationManager: CLLocationManager
     private var modelContainer: ModelContainer?
     private var isConfigured = false
+
+    var isTrackingEnabled: Bool {
+        if UserDefaults.standard.object(forKey: Self.trackingEnabledKey) == nil {
+            return true
+        }
+        return UserDefaults.standard.bool(forKey: Self.trackingEnabledKey)
+    }
 
     override init() {
         self.locationManager = CLLocationManager()
@@ -21,12 +30,31 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
         self.authorizationStatus = locationManager.authorizationStatus
     }
 
+    static func shouldStartTracking(
+        isEnabled: Bool,
+        authorizationStatus: CLAuthorizationStatus,
+        isAlreadyTracking: Bool
+    ) -> Bool {
+        guard isEnabled else { return false }
+        guard !isAlreadyTracking else { return false }
+        switch authorizationStatus {
+        case .authorizedAlways, .authorizedWhenInUse, .notDetermined:
+            return true
+        case .denied, .restricted:
+            return false
+        @unknown default:
+            return false
+        }
+    }
+
     func configure(modelContainer: ModelContainer) {
         self.modelContainer = modelContainer
         guard !isConfigured else { return }
         isConfigured = true
         requestPermissions()
-        startTracking()
+        if isTrackingEnabled {
+            startTracking()
+        }
     }
 
     func reportStartupError(_ message: String) {
@@ -44,7 +72,23 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
         }
     }
 
+    func setTrackingEnabled(_ enabled: Bool) {
+        UserDefaults.standard.set(enabled, forKey: Self.trackingEnabledKey)
+        if enabled {
+            startTracking()
+        } else {
+            stopTracking()
+        }
+    }
+
     func startTracking() {
+        guard Self.shouldStartTracking(
+            isEnabled: isTrackingEnabled,
+            authorizationStatus: authorizationStatus,
+            isAlreadyTracking: isTrackingActive
+        ) else { return }
+
+        isTrackingActive = true
         locationManager.desiredAccuracy = kCLLocationAccuracyHundredMeters
         locationManager.distanceFilter = 50.0
         locationManager.activityType = .other
@@ -54,6 +98,16 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
 
         if CLLocationManager.significantLocationChangeMonitoringAvailable() {
             locationManager.startMonitoringSignificantLocationChanges()
+        }
+    }
+
+    func stopTracking() {
+        guard isTrackingActive else { return }
+        isTrackingActive = false
+
+        locationManager.stopUpdatingLocation()
+        if CLLocationManager.significantLocationChangeMonitoringAvailable() {
+            locationManager.stopMonitoringSignificantLocationChanges()
         }
     }
 
@@ -68,6 +122,7 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
         guard !validLocations.isEmpty else { return }
 
         Task { @MainActor in
+            guard self.isTrackingEnabled else { return }
             guard let container = self.modelContainer else { return }
             let context = ModelContext(container)
             for loc in validLocations {
@@ -90,6 +145,18 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
     nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         Task { @MainActor in
             self.authorizationStatus = manager.authorizationStatus
+            switch manager.authorizationStatus {
+            case .authorizedAlways, .authorizedWhenInUse:
+                if self.isTrackingEnabled {
+                    self.startTracking()
+                }
+            case .denied, .restricted:
+                self.stopTracking()
+            case .notDetermined:
+                break
+            @unknown default:
+                break
+            }
         }
     }
 
@@ -102,6 +169,7 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
             case .denied:
                 Task { @MainActor in
                     self.authorizationStatus = .denied
+                    self.stopTracking()
                     self.lastError = "Location tracking authorization denied."
                 }
                 return

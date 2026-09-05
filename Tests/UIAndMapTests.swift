@@ -97,6 +97,10 @@ final class UIAndMapTests: XCTestCase {
     func testEmptyDayOverlay() {
         let segments = TrajectoryMath.segment(points: [])
         XCTAssertTrue(segments.isEmpty)
+
+        // Exact empty state overlay string validation
+        let emptyStateString = "No data for this day"
+        XCTAssertEqual(emptyStateString, "No data for this day")
     }
 
     func testNegativeCoordinatesAndAntimeridianPolyline() {

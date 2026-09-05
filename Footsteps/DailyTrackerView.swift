@@ -4,17 +4,12 @@ import CoreLocation
 
 struct DailyTrackerView: View {
     @ObservedObject private var locationManager = LocationManager.shared
+    @AppStorage(LocationManager.trackingEnabledKey) private var isTrackingEnabled: Bool = true
     @Environment(\.scenePhase) private var scenePhase
     @State private var selectedDate: Date = Date()
     @State private var currentDateReference: Date = Date()
     @State private var selectedSegmentID: String? = nil
-
-    private var formattedDate: String {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .none
-        return formatter.string(from: selectedDate)
-    }
+    @State private var isSettingsPresented: Bool = false
 
     private var canGoNext: Bool {
         TrajectoryMath.canNavigateNext(from: selectedDate, now: currentDateReference)
@@ -112,8 +107,13 @@ struct DailyTrackerView: View {
 
                 Spacer()
 
-                Text(formattedDate)
-                    .font(.headline)
+                DatePicker(
+                    "Select Date",
+                    selection: $selectedDate,
+                    in: ...currentDateReference,
+                    displayedComponents: .date
+                )
+                .labelsHidden()
 
                 Spacer()
 
@@ -129,6 +129,15 @@ struct DailyTrackerView: View {
                 }
                 .disabled(!canGoNext)
                 .accessibilityLabel("Next Day")
+
+                Button(action: {
+                    isSettingsPresented = true
+                }) {
+                    Image(systemName: "gearshape")
+                        .font(.headline)
+                        .padding(8)
+                }
+                .accessibilityLabel("Settings")
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
@@ -137,6 +146,29 @@ struct DailyTrackerView: View {
             // Map content with predicate-filtered SwiftData query
             DailyTrajectoryContainerView(selectedDate: selectedDate, selectedSegmentID: $selectedSegmentID)
                 .edgesIgnoringSafeArea(.bottom)
+        }
+        .sheet(isPresented: $isSettingsPresented) {
+            NavigationStack {
+                Form {
+                    Toggle("Background Tracking", isOn: $isTrackingEnabled)
+                }
+                .navigationTitle("Settings")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") {
+                            isSettingsPresented = false
+                        }
+                    }
+                }
+            }
+            .presentationDetents([.medium, .large])
+        }
+        .onChange(of: isTrackingEnabled) { _, isEnabled in
+            locationManager.setTrackingEnabled(isEnabled)
+        }
+        .onChange(of: selectedDate) { _, _ in
+            selectedSegmentID = nil
         }
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .active {
@@ -190,6 +222,18 @@ struct DailyTrajectoryContainerView: View {
             )
         }
         let segments = TrajectoryMath.segment(points: trajectoryPoints)
-        TrajectoryMapView(segments: segments, selectedSegmentID: $selectedSegmentID)
+
+        ZStack {
+            TrajectoryMapView(segments: segments, selectedSegmentID: $selectedSegmentID)
+
+            if dayPoints.isEmpty {
+                Text("No data for this day")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
+            }
+        }
     }
 }
