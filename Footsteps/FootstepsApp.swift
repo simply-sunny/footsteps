@@ -14,44 +14,6 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     }
 }
 
-/// Interim root view for Task 1.
-/// In Task 2, this view will be replaced with DailyTrackerView().
-struct InterimRootView: View {
-    @ObservedObject private var locationManager = LocationManager.shared
-
-    var body: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "figure.walk.circle.fill")
-                .font(.system(size: 64))
-                .foregroundColor(.accentColor)
-            Text("Footsteps Tracking Active")
-                .font(.title2.bold())
-            Text("Authorization: \(authStatusDescription)")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-            if let error = locationManager.lastError {
-                Text(error)
-                    .font(.caption)
-                    .foregroundColor(.red)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal)
-            }
-        }
-        .padding()
-    }
-
-    private var authStatusDescription: String {
-        switch locationManager.authorizationStatus {
-        case .notDetermined: return "Not Determined"
-        case .restricted: return "Restricted"
-        case .denied: return "Denied"
-        case .authorizedAlways: return "Authorized Always"
-        case .authorizedWhenInUse: return "Authorized When In Use"
-        @unknown default: return "Unknown"
-        }
-    }
-}
-
 @main
 struct FootstepsApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
@@ -125,8 +87,7 @@ struct FootstepsApp: App {
                 }
                 .padding()
             } else if let container {
-                // Task 1 interim view. Swapped with DailyTrackerView in Task 2.
-                InterimRootView()
+                DailyTrackerView()
                     .modelContainer(container)
             }
         }

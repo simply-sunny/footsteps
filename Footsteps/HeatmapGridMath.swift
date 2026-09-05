@@ -39,6 +39,22 @@ enum HeatmapGridMath {
         calendar.isDate(date, inSameDayAs: now)
     }
 
+    static func canNavigateNext(from date: Date, calendar: Calendar = .current, now: Date = Date()) -> Bool {
+        let startOfDate = calendar.startOfDay(for: date)
+        let startOfToday = calendar.startOfDay(for: now)
+        return startOfDate < startOfToday
+    }
+
+    static func previousDay(from date: Date, calendar: Calendar = .current) -> Date {
+        let startOfDay = calendar.startOfDay(for: date)
+        return calendar.date(byAdding: .day, value: -1, to: startOfDay) ?? startOfDay.addingTimeInterval(-86400)
+    }
+
+    static func nextDay(from date: Date, calendar: Calendar = .current) -> Date {
+        let startOfDay = calendar.startOfDay(for: date)
+        return calendar.date(byAdding: .day, value: 1, to: startOfDay) ?? startOfDay.addingTimeInterval(86400)
+    }
+
     static func computeDensityGrid(
         coordinates: [(latitude: Double, longitude: Double)],
         cellSizeDegrees: Double = defaultCellSizeDegrees
@@ -56,10 +72,16 @@ enum HeatmapGridMath {
                 existing.count += 1
                 cellCounts[key] = existing
             } else {
-                let minLat = Double(latIndex) * cellSizeDegrees
-                let maxLat = minLat + cellSizeDegrees
-                let minLon = Double(lonIndex) * cellSizeDegrees
-                let maxLon = minLon + cellSizeDegrees
+                let rawMinLat = Double(latIndex) * cellSizeDegrees
+                let rawMaxLat = rawMinLat + cellSizeDegrees
+                let minLat = max(-90.0, min(90.0, rawMinLat))
+                let maxLat = max(-90.0, min(90.0, rawMaxLat))
+
+                let rawMinLon = Double(lonIndex) * cellSizeDegrees
+                let rawMaxLon = rawMinLon + cellSizeDegrees
+                let minLon = max(-180.0, min(180.0, rawMinLon))
+                let maxLon = max(-180.0, min(180.0, rawMaxLon))
+
                 cellCounts[key] = (minLat: minLat, maxLat: maxLat, minLon: minLon, maxLon: maxLon, count: 1)
             }
         }
