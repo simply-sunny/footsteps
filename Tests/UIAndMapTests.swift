@@ -223,4 +223,67 @@ final class UIAndMapTests: XCTestCase {
         XCTAssertLessThan(distToSeg1, 5.0, "Tap on seg1 midpoint should have small distance to seg1")
         XCTAssertGreaterThan(distToSeg2, 50.0, "Tap on seg1 midpoint should be far from seg2")
     }
+
+    // MARK: - HealthKit StepCountReader & Details Sheet Tests
+
+    func testStepCountFormatting() {
+        // Nil count must degrade to "Steps unavailable"
+        XCTAssertEqual(StepCountReader.formatStepCount(nil), "Steps unavailable")
+
+        // Zero and non-zero counts
+        XCTAssertEqual(StepCountReader.formatStepCount(0), "0 steps")
+        XCTAssertEqual(StepCountReader.formatStepCount(1), "1 step")
+        XCTAssertEqual(StepCountReader.formatStepCount(42), "42 steps")
+
+        let thousandFormatted = StepCountReader.formatStepCount(1000)
+        XCTAssertTrue(thousandFormatted.contains("1,000") || thousandFormatted.contains("1000"), "Must contain formatted 1000 steps")
+        XCTAssertTrue(thousandFormatted.hasSuffix("steps"))
+    }
+
+    func testDurationMinutesFormatting() {
+        XCTAssertEqual(StepCountReader.formatDurationMinutes(0.0), "1 min", "Sub-minute durations should display minimum 1 min")
+        XCTAssertEqual(StepCountReader.formatDurationMinutes(29.0), "1 min")
+        XCTAssertEqual(StepCountReader.formatDurationMinutes(60.0), "1 min")
+        XCTAssertEqual(StepCountReader.formatDurationMinutes(89.0), "1 min")
+        XCTAssertEqual(StepCountReader.formatDurationMinutes(91.0), "2 min")
+        XCTAssertEqual(StepCountReader.formatDurationMinutes(300.0), "5 min")
+        XCTAssertEqual(StepCountReader.formatDurationMinutes(3600.0), "60 min")
+    }
+
+    func testTimeIntervalFormatting() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+
+        var components = DateComponents()
+        components.year = 2026
+        components.month = 6
+        components.day = 15
+        components.hour = 9
+        components.minute = 15
+        let start = calendar.date(from: components)!
+        let end = calendar.date(byAdding: .minute, value: 45, to: start)!
+
+        let formatted = StepCountReader.formatTimeInterval(
+            start: start,
+            end: end,
+            locale: Locale(identifier: "en_US"),
+            timeZone: TimeZone(identifier: "UTC")!
+        )
+        XCTAssertFalse(formatted.isEmpty)
+        XCTAssertTrue(formatted.contains("9:15") && formatted.contains("10:00"))
+    }
+
+    func testInvalidQueryIntervalGuard() async {
+        let reader = StepCountReader.shared
+        let now = Date()
+        let past = now.addingTimeInterval(-60)
+
+        // Reversed interval where start > end must return nil
+        let resultReversed = await reader.fetchStepCount(startDate: now, endDate: past)
+        XCTAssertNil(resultReversed, "Reversed date interval must safely return nil")
+
+        // Equal start and end must return nil
+        let resultEqual = await reader.fetchStepCount(startDate: now, endDate: now)
+        XCTAssertNil(resultEqual, "Zero-duration date interval must safely return nil")
+    }
 }

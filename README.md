@@ -14,8 +14,10 @@ A minimal, local-first iOS 17+ app that passively records device location and re
 - **Passive Background Tracking**: Continuous location monitoring (100m accuracy, 50m distance filter) with significant location change wakeups.
 - **Local-First Storage**: Persistent location point history stored locally on-device using SwiftData with encrypted file protection (`completeUntilFirstUserAuthentication`).
 - **Segmented Trajectory Overlay**: Pure derived trajectory segmentation with MapKit polyline overlays (`SegmentPolyline`), discontinuity detection, and interactive segment selection.
+- **On-Demand HealthKit Steps**: Tapping a trajectory segment presents a compact bottom sheet displaying localized start–end times, duration in minutes, and cumulative HealthKit step counts for the exact segment interval.
+- **Privacy-Preserving Degradation**: Gracefully degrades to "Steps unavailable" when steps are denied, unavailable, or on unsupported devices without distinguishing read denial.
 - **Day-by-Day Navigation**: Daily tracker UI with date stepping, calendar day boundary calculations, and future date navigation guards.
-- **Zero Third-Party Dependencies**: Pure Apple system frameworks (`SwiftUI`, `SwiftData`, `MapKit`, `CoreLocation`, `UIKit`).
+- **Zero Third-Party Dependencies**: Pure Apple system frameworks (`SwiftUI`, `SwiftData`, `MapKit`, `CoreLocation`, `HealthKit`, `UIKit`).
 - **Native iOS 18 Dark Appearance Icon**: Configured asset catalog supporting both default and native iOS 18 dark appearance icon styles.
 
 ## Requirements
@@ -36,8 +38,9 @@ A minimal, local-first iOS 17+ app that passively records device location and re
 
 ## Controls
 
-- **Day Navigation**: Tap `<` or `>` in the navigation bar to navigate between calendar days (future day navigation is disabled).
-- **Date Status**: Header displays the currently active date, total recorded points for that day, and permission/tracking status.
+- **Day Navigation**: Tap `<` or `>` in the navigation bar or use the interactive DatePicker to navigate between calendar days (future day navigation is disabled).
+- **Segment Inspection**: Tap any trajectory line on the map to select it and view a bottom sheet with start–end time, duration, and on-demand HealthKit step count.
+- **Date Status**: Header displays date selection and permission/tracking status.
 - **Trajectory View**: Pan and pinch to zoom over the MapKit canvas; tap individual trajectory segments to highlight them.
 - **User Tracking**: Tap the native tracking button to toggle location tracking modes.
 - **Location Permission Banner**: Tap the warning banner if location permissions are restricted to open iOS Settings.
@@ -47,7 +50,7 @@ A minimal, local-first iOS 17+ app that passively records device location and re
 ```bash
 # Run Foundation math, segmentation, and navigation test suites via CLI
 swiftc Tests/Task1FoundationTests.swift Footsteps/TrajectoryMath.swift -o /tmp/task1_test && /tmp/task1_test
-swiftc Tests/Task2FoundationTests.swift Footsteps/TrajectoryMath.swift -o /tmp/task2_test && /tmp/task2_test
+swiftc Tests/Task2FoundationTests.swift Footsteps/TrajectoryMath.swift Footsteps/StepCountReader.swift -o /tmp/task2_test && /tmp/task2_test
 ```
 
 Full app compilation and UI/MapKit test execution require Xcode with the iOS 17+ SDK (`Cmd + B` / `Cmd + U`).

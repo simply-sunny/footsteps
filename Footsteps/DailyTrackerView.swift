@@ -197,6 +197,10 @@ struct DailyTrajectoryContainerView: View {
     @Binding var selectedSegmentID: String?
     @Query private var dayPoints: [LocationPoint]
 
+    @State private var stepCount: Int? = nil
+    @State private var isLoadingSteps: Bool = false
+    @State private var queryTask: Task<Void, Never>? = nil
+
     init(selectedDate: Date, selectedSegmentID: Binding<String?> = .constant(nil), calendar: Calendar = .current) {
         self.selectedDate = selectedDate
         self._selectedSegmentID = selectedSegmentID
@@ -223,6 +227,7 @@ struct DailyTrajectoryContainerView: View {
             )
         }
         let segments = TrajectoryMath.segment(points: trajectoryPoints)
+        let selectedSegment = segments.first(where: { $0.id == selectedSegmentID })
 
         ZStack {
             TrajectoryMapView(segments: segments, selectedSegmentID: $selectedSegmentID)
@@ -236,5 +241,93 @@ struct DailyTrajectoryContainerView: View {
                     .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
             }
         }
+        .sheet(isPresented: Binding(
+            get: { selectedSegmentID != nil && selectedSegment != nil },
+            set: { isPresented in
+                if !isPresented {
+                    selectedSegmentID = nil
+                }
+            }
+        )) {
+            if let segment = selectedSegment {
+                SegmentDetailCardView(
+                    segment: segment,
+                    stepCount: stepCount,
+                    isLoadingSteps: isLoadingSteps
+                )
+                .presentationDetents([.fraction(0.22), .medium])
+                .presentationDragIndicator(.visible)
+                .presentationBackgroundInteraction(.enabled(upThrough: .medium))
+            }
+        }
+        .onChange(of: selectedSegmentID) { _, newID in
+            queryTask?.cancel()
+            stepCount = nil
+
+            guard let newID = newID,
+                  let matchingSegment = segments.first(where: { $0.id == newID }) else {
+                isLoadingSteps = false
+                return
+            }
+
+            isLoadingSteps = true
+            let start = matchingSegment.startDate
+            let end = matchingSegment.endDate
+
+            queryTask = Task {
+                let count = await StepCountReader.shared.fetchStepCount(startDate: start, endDate: end)
+                guard !Task.isCancelled, selectedSegmentID == newID else { return }
+                self.stepCount = count
+                self.isLoadingSteps = false
+            }
+        }
+    }
+}
+
+/// Compact bottom card presenting exact details for the tapped trajectory segment.
+struct SegmentDetailCardView: View {
+    let segment: TrajectorySegment
+    let stepCount: Int?
+    let isLoadingSteps: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            // Localized start–end time
+            HStack(spacing: 8) {
+                Image(systemName: "clock.fill")
+                    .foregroundColor(.accentColor)
+                    .font(.subheadline)
+                Text(StepCountReader.formatTimeInterval(start: segment.startDate, end: segment.endDate))
+                    .font(.headline)
+            }
+
+            HStack(spacing: 24) {
+                // Duration in minutes
+                HStack(spacing: 6) {
+                    Image(systemName: "timer")
+                        .foregroundColor(.secondary)
+                    Text(StepCountReader.formatDurationMinutes(segment.duration))
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+
+                // Step count / Steps unavailable
+                HStack(spacing: 6) {
+                    Image(systemName: "figure.walk")
+                        .foregroundColor(.secondary)
+                    if isLoadingSteps {
+                        ProgressView()
+                            .scaleEffect(0.8)
+                    } else {
+                        Text(StepCountReader.formatStepCount(stepCount))
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 16)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

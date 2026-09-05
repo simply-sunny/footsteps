@@ -145,6 +145,27 @@ struct Task2FoundationTests {
         assertTrue(twoSegs.count == 2, "Should have 2 segments")
         assertTrue(twoSegs[0].id != twoSegs[1].id, "Distinct segments must have distinct IDs")
 
+        // 11. Step Count Formatting & Degradation
+        assertTrue(StepCountReader.formatStepCount(nil) == "Steps unavailable", "Nil steps must degrade to 'Steps unavailable'")
+        assertTrue(StepCountReader.formatStepCount(0) == "0 steps", "0 steps format")
+        assertTrue(StepCountReader.formatStepCount(1) == "1 step", "1 step singular format")
+        assertTrue(StepCountReader.formatStepCount(250) == "250 steps", "250 steps plural format")
+
+        // 12. Duration Minutes Formatting
+        assertTrue(StepCountReader.formatDurationMinutes(0) == "1 min", "0s duration must format to 1 min")
+        assertTrue(StepCountReader.formatDurationMinutes(45) == "1 min", "45s duration must format to 1 min")
+        assertTrue(StepCountReader.formatDurationMinutes(90) == "2 min", "90s duration must format to 2 min")
+        assertTrue(StepCountReader.formatDurationMinutes(300) == "5 min", "300s duration must format to 5 min")
+
+        // 13. Time Interval Formatting
+        let formattedInterval = StepCountReader.formatTimeInterval(
+            start: baseDate,
+            end: baseDate.addingTimeInterval(1800),
+            locale: Locale(identifier: "en_US"),
+            timeZone: TimeZone(identifier: "UTC")!
+        )
+        assertFalse(formattedInterval.isEmpty, "Time interval must format non-empty string")
+
         if failureCount > 0 {
             print("Task 2 Foundation Tests FAILED with \(failureCount) failures.")
             exit(1)

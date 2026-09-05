@@ -14,6 +14,7 @@
 		100000000000000000000045 /* TrajectoryMapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000016 /* TrajectoryMapView.swift */; };
 		100000000000000000000046 /* DailyTrackerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000017 /* DailyTrackerView.swift */; };
 		100000000000000000000047 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000018 /* Assets.xcassets */; };
+		100000000000000000000048 /* StepCountReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000019 /* StepCountReader.swift */; };
 		100000000000000000000051 /* LocationAndStorageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000021 /* LocationAndStorageTests.swift */; };
 		100000000000000000000052 /* UIAndMapTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000023 /* UIAndMapTests.swift */; };
 /* End PBXBuildFile section */
@@ -37,6 +38,8 @@
 		100000000000000000000016 /* TrajectoryMapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrajectoryMapView.swift; sourceTree = "<group>"; };
 		100000000000000000000017 /* DailyTrackerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyTrackerView.swift; sourceTree = "<group>"; };
 		100000000000000000000018 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		100000000000000000000019 /* StepCountReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StepCountReader.swift; sourceTree = "<group>"; };
+		10000000000000000000001A /* Footsteps.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Footsteps.entitlements; sourceTree = "<group>"; };
 		100000000000000000000021 /* LocationAndStorageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationAndStorageTests.swift; sourceTree = "<group>"; };
 		100000000000000000000022 /* Task1FoundationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Task1FoundationTests.swift; sourceTree = "<group>"; };
 		100000000000000000000023 /* UIAndMapTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UIAndMapTests.swift; sourceTree = "<group>"; };
@@ -81,8 +84,10 @@
 				100000000000000000000014 /* TrajectoryMath.swift */,
 				100000000000000000000016 /* TrajectoryMapView.swift */,
 				100000000000000000000017 /* DailyTrackerView.swift */,
+				100000000000000000000019 /* StepCountReader.swift */,
 				100000000000000000000018 /* Assets.xcassets */,
 				100000000000000000000015 /* Info.plist */,
+				10000000000000000000001A /* Footsteps.entitlements */,
 			);
 			path = Footsteps;
 			sourceTree = "<group>";
@@ -157,6 +162,11 @@
 				TargetAttributes = {
 					100000000000000000000081 = {
 						CreatedOnToolsVersion = 15.0;
+						SystemCapabilities = {
+							com.apple.HealthKit = {
+								enabled = 1;
+							};
+						};
 					};
 					100000000000000000000082 = {
 						CreatedOnToolsVersion = 15.0;
@@ -212,6 +222,7 @@
 				100000000000000000000044 /* TrajectoryMath.swift in Sources */,
 				100000000000000000000045 /* TrajectoryMapView.swift in Sources */,
 				100000000000000000000046 /* DailyTrackerView.swift in Sources */,
+				100000000000000000000048 /* StepCountReader.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -352,6 +363,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Footsteps/Footsteps.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 3LXRQC5NHF;
@@ -376,6 +388,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Footsteps/Footsteps.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;

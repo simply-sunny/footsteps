@@ -20,6 +20,8 @@
 	<string>1</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSHealthShareUsageDescription</key>
+	<string>Footsteps reads your step count to display steps taken during recorded trajectory segments.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>Footsteps passively tracks your location in the background to build your daily movement history.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
