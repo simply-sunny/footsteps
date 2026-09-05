@@ -23,11 +23,7 @@ public final class StepCountReader: @unchecked Sendable {
                 try await healthStore.requestAuthorization(toShare: [], read: [stepType])
             }
 
-            let predicate = HKQuery.predicateForSamples(
-                withStart: startDate,
-                end: endDate,
-                options: [.strictStartDate, .strictEndDate]
-            )
+            let predicate = Self.makeSamplePredicate(startDate: startDate, endDate: endDate)
             let samplePredicate = HKSamplePredicate.quantitySample(type: stepType, predicate: predicate)
             let descriptor = HKStatisticsQueryDescriptor(predicate: samplePredicate, options: .cumulativeSum)
             let statistics = try await descriptor.result(for: healthStore)
@@ -40,6 +36,13 @@ public final class StepCountReader: @unchecked Sendable {
         } catch {
             return nil
         }
+    }
+
+    // MARK: - Predicate & Query Construction Helpers
+
+    /// Builds a sample predicate covering [startDate, endDate] with options: [] to allow overlapping boundary samples.
+    public static func makeSamplePredicate(startDate: Date, endDate: Date) -> NSPredicate {
+        HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: [])
     }
 
     // MARK: - Formatting Helpers

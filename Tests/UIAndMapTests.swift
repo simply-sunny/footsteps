@@ -273,6 +273,15 @@ final class UIAndMapTests: XCTestCase {
         XCTAssertTrue(formatted.contains("9:15") && formatted.contains("10:00"))
     }
 
+    func testSamplePredicateConstruction() {
+        let start = Date(timeIntervalSince1970: 1772900000)
+        let end = Date(timeIntervalSince1970: 1772901800)
+        let predicate = StepCountReader.makeSamplePredicate(startDate: start, endDate: end)
+        XCTAssertNotNil(predicate)
+        let predicateFormat = predicate.predicateFormat
+        XCTAssertFalse(predicateFormat.isEmpty, "Sample predicate format must be valid")
+    }
+
     func testInvalidQueryIntervalGuard() async {
         let reader = StepCountReader.shared
         let now = Date()

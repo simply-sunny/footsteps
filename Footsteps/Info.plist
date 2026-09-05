@@ -25,7 +25,7 @@
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>Footsteps passively tracks your location in the background to build your daily movement history.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Footsteps records your daily movements to display your personal density heatmap.</string>
+	<string>Footsteps records your daily movements to display your daily trajectory history.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>
