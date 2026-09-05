@@ -22,6 +22,7 @@ Complete. Review findings resolved and final cleanup performed:
 - Created `Footsteps.xcodeproj/project.pbxproj` and shared scheme for iOS 17+ / Swift 5.0 mode referencing all source and test files.
 - Added standard MIT `LICENSE` file (`Copyright (c) 2026 Footsteps contributors`).
 - Authored test suites: `Tests/Task1FoundationTests.swift` (CLI runner), `Tests/Task2FoundationTests.swift` (CLI runner), `Tests/LocationAndStorageTests.swift` (XCTest), and `Tests/UIAndMapTests.swift` (XCTest).
+- Added app icon assets (`AppIcon-Default.png`, `AppIcon-Dark.png`, `Art/Footsteps_icon2.svg`) with CC BY-SA 3.0 attribution in `ATTRIBUTION.md`.
 - Updated `README.md` with device setup, signing, lifecycle details, and manual verification checklist.
 
 ## Relevant Files
@@ -33,11 +34,14 @@ Complete. Review findings resolved and final cleanup performed:
 - `Footsteps/LocationPoint.swift`: SwiftData `@Model`.
 - `Footsteps/Info.plist`: Background modes and location authorization usage strings.
 - `Footsteps.xcodeproj/project.pbxproj`: Project configuration.
+- `Footsteps/Assets.xcassets/`: App icon and color asset catalogs.
+- `Art/Footsteps_icon2.svg`: Preserved source vector icon.
 - `Tests/Task1FoundationTests.swift`: Pure Foundation test runner (Task 1).
 - `Tests/Task2FoundationTests.swift`: Pure Foundation test runner (Task 2).
 - `Tests/LocationAndStorageTests.swift`: XCTest persistence and storage tests.
 - `Tests/UIAndMapTests.swift`: XCTest UI filtering and map overlay tests.
 - `LICENSE`: Standard MIT license.
+- `ATTRIBUTION.md`: Icon artwork attribution and CC BY-SA 3.0 licensing details.
 - `README.md`: Project documentation, signing guide, and verification checklist.
 - `.pi/final-cleanup-report.md`: Final cleanup and review findings resolution report.
 

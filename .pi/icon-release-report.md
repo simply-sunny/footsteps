@@ -14,7 +14,7 @@ Applied official Footsteps app icon and reference project documentation styling 
   - `Footsteps/Assets.xcassets/AppIcon.appiconset/Contents.json`: Universal iOS single-size 1024x1024 icon configuration supporting default and native iOS 18 dark appearance.
   - `Footsteps/Assets.xcassets/AppIcon.appiconset/AppIcon-Default.png`: 1024x1024 opaque PNG (white shape on black background, 75% scale centered inset).
   - `Footsteps/Assets.xcassets/AppIcon.appiconset/AppIcon-Dark.png`: 1024x1024 opaque PNG (black shape on white background, 75% scale centered inset).
-  - `Footsteps/Assets.xcassets/AppIcon.appiconset/Footsteps_icon2.svg`: Exact preserved vector artwork source.
+  - `Art/Footsteps_icon2.svg`: Exact preserved vector artwork source.
   - `Footsteps/Assets.xcassets/AccentColor.colorset/Contents.json`: System accent color catalog entry.
 
 ## 3. Verification & Checks
