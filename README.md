@@ -11,17 +11,25 @@ A minimal, local-first iOS 17+ app that passively records device location with m
 
 ## Features
 
+- **Quiet Full-Bleed Map & Native UI**: Clean, full-bleed MapKit map interface with floating capsule controls for date navigation, recentering, and settings. No raw dots or accuracy jargon in normal view.
+- **Path vs. Time (Heatmap) Modes**:
+  - **Path Mode**: Renders smooth reconstructed trajectory segments and duration-scaled dwell nodes.
+  - **Time Mode**: Renders true time-weighted radial heat gradients (via native `MKOverlayRenderer` / CoreGraphics gradients) scaled strictly by dwell duration ($\sqrt{\text{duration}}$), invariant to raw fix density.
+- **Day Detail Screen (Swift Charts)**: Tapping the top summary bar presents a full-screen day analysis in strict sequence:
+  1. **Headline**: Observed moving distance, visited place count, moving duration.
+  2. **WHERE MY TIME WENT**: Non-interactive dwell mini-map displaying time-weighted heat overlays.
+  3. **MY DAY**: Disjoint cumulative observed-distance line chart broken across all unknown gaps.
+  4. **TIME BY PLACE**: Top-5 places horizontal bar chart ranked by dwell duration.
+  5. **DAY BREAKDOWN**: Non-overlapping stationary, moving, and unknown elapsed-time donut breakdown chart.
+- **Mathematical Day Partition (`DayHistory.swift`)**: Pure Foundation mathematical partition of calendar day elapsed time into mutually disjoint moving, stationary, and unknown sets ($T_{\text{moving}} + T_{\text{stationary}} + T_{\text{unknown}} = T_{\text{elapsed}}$), accounting for calendar DST (23h spring, 25h fall) and clamping today's elapsed time to current time.
+- **Conservative Anchored Place Clustering**: Deterministic grouping of nearby stationary stays ($\le 65\text{m}$) into stable place identities without network geocoding or fabricated venue names.
+- **Tap Details**: Tapping stays displays neutral cards with observed arrival/departure bounds and duration; single observations display without inferred duration.
+- **Dedicated Settings & Developer Diagnostics**: User settings cleanly separated from engineering diagnostics. Raw fix metrics, sensor telemetry, and debug overlays are sequestered under Developer Diagnostics.
 - **Maximum-Fidelity Passive Tracking**: Zero-loss raw evidence ingestion configured with `kCLLocationAccuracyBestForNavigation`, zero distance filter, fitness activity type, background indicator, and temporary full accuracy request.
 - **Strict Evidence vs. Inference Storage**: Persistent raw location point history stored locally on-device using versioned SwiftData schemas (`LocationSchemaV1`, `LocationSchemaV2`, `LocationMigrationPlan`) with encrypted file protection (`completeUntilFirstUserAuthentication`).
 - **Raw Sentinel & Metadata Preservation**: Captures raw altitude, speed, course, vertical/speed/course accuracies (preserving native negative sentinels such as `-1` without silent nil conversion), floor level, CoreLocation `sourceInformation` flags (`isSimulatedBySoftware`, `isProducedByAccessory`), tracking session ID, lifecycle state (foreground/background/unknown), and reception timestamps without discarding coarse fixes at ingestion.
-- **Anchored Uncertainty-Aware Segmentation**: Dynamic trajectory reconstruction with anchored stationary grouping (grouping jitter within uncertainty radius into dwell observations with supported continuous duration), slow cumulative walk preservation, display-only timestamp de-duplication, poor-fix barrier splitting (>200m), speed jump splitting (>50m/s), and chronological sorting.
-- **Singleton & Dwell Uncertainty Visualization**: Singletons and stationary dwells rendered as distinct MapKit coordinate overlays with uncertainty halo circles proportional to horizontal accuracy, supported observation duration display, and tap-to-inspect detail cards.
-- **Stable Map Viewport & Native Controls**: Date-keyed viewport framing preserves user pan/zoom across live incremental point arrivals. Native `MKCompassButton` and `MKUserTrackingButton` anchored cleanly at bottom edges.
-- **Diagnostics Map Overlay & Telemetry**: Debug toggle rendering per-point accuracy halos, classification badges (usable $\le 100\text{m}$, suspicious $100–200\text{m}$, outlier $>200\text{m}$), time deltas, speed, and transient `CLError.locationUnknown` evidence counters.
-- **On-Demand HealthKit Steps**: Tapping a trajectory segment presents a compact bottom sheet displaying localized start–end times, duration in minutes, and cumulative HealthKit step counts for the exact segment interval.
-- **Privacy-Preserving Degradation**: Gracefully degrades to "Steps unavailable" when steps are denied, unavailable, or on unsupported devices without distinguishing read denial.
-- **Date-First Navigation & Precise Location Recovery**: Daily tracker UI with date stepping, calendar day boundary calculations, instant container transitions, precise authorization status display, and on-demand full accuracy recovery actions.
-- **Zero Third-Party Dependencies**: Pure Apple system frameworks (`SwiftUI`, `SwiftData`, `MapKit`, `CoreLocation`, `HealthKit`, `UIKit`).
+- **Stable Map Viewport & Native Controls**: Date-keyed viewport framing preserves user pan/zoom across live incremental point arrivals. Native recenter and date scrubbing controls.
+- **Zero Third-Party Dependencies**: Pure Apple system frameworks (`SwiftUI`, `SwiftData`, `MapKit`, `Charts`, `CoreLocation`, `HealthKit`, `UIKit`).
 - **Native iOS 18 Dark Appearance Icon**: Configured asset catalog supporting both default and native iOS 18 dark appearance icon styles.
 
 ## Requirements

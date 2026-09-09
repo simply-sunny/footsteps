@@ -783,4 +783,234 @@ final class UIAndMapTests: XCTestCase {
         let resultEqual = await reader.fetchStepCount(startDate: now, endDate: now)
         XCTAssertNil(resultEqual, "Zero-duration date interval must safely return nil")
     }
+
+    // MARK: - Native MapKit Display Mode & Time Heatmap Tests
+
+    func testMapDisplayModePathVsTimeOverlays() {
+        let coordinator = TrajectoryMapView.Coordinator()
+        let mapView = MKMapView(frame: CGRect(x: 0, y: 0, width: 400, height: 800))
+
+        let t0 = Date(timeIntervalSince1970: 1772900000)
+        let p1 = TrajectoryPoint(latitude: 37.7749, longitude: -122.4194, timestamp: t0)
+        let p2 = TrajectoryPoint(latitude: 37.7759, longitude: -122.4194, timestamp: t0.addingTimeInterval(10))
+        let segment = TrajectorySegment(points: [p1, p2])
+
+        let stay = DayStay(
+            id: "stay_1",
+            latitude: 37.7770,
+            longitude: -122.4194,
+            arrivalDate: t0.addingTimeInterval(100),
+            departureDate: t0.addingTimeInterval(1900),
+            duration: 1800.0,
+            horizontalAccuracy: 8.0,
+            assignedPlaceLabel: "Place 1"
+        )
+
+        // 1. In Path mode: overlay count must include polylines and stay circles
+        _ = coordinator.updateMapOverlays(
+            mapView: mapView,
+            segments: [segment],
+            stays: [stay],
+            singleObservations: [],
+            displayMode: .path,
+            dayKey: "day_1"
+        )
+
+        let polylineOverlays = mapView.overlays.compactMap { $0 as? SegmentPolyline }
+        let stayOverlays = mapView.overlays.compactMap { $0 as? StayCircleOverlay }
+        let heatOverlays = mapView.overlays.compactMap { $0 as? DwellHeatOverlay }
+
+        XCTAssertEqual(polylineOverlays.count, 1, "Path mode must render segment polylines")
+        XCTAssertEqual(stayOverlays.count, 1, "Path mode must render stay circles")
+        XCTAssertEqual(heatOverlays.count, 0, "Path mode must not render heat overlays")
+
+        // 2. In Time mode: overlay count must include heat overlays only (no trajectory polylines)
+        _ = coordinator.updateMapOverlays(
+            mapView: mapView,
+            segments: [segment],
+            stays: [stay],
+            singleObservations: [],
+            displayMode: .time,
+            dayKey: "day_1_time"
+        )
+
+        let polylineOverlaysTime = mapView.overlays.compactMap { $0 as? SegmentPolyline }
+        let stayOverlaysTime = mapView.overlays.compactMap { $0 as? StayCircleOverlay }
+        let heatOverlaysTime = mapView.overlays.compactMap { $0 as? DwellHeatOverlay }
+
+        XCTAssertEqual(polylineOverlaysTime.count, 0, "Time mode must hide polylines")
+        XCTAssertEqual(stayOverlaysTime.count, 0, "Time mode replaces standard stay circles with heat overlays")
+        XCTAssertEqual(heatOverlaysTime.count, 1, "Time mode must render dwell heat overlays")
+    }
+
+    func testDwellHeatOverlayRadiusScalingWithDuration() {
+        let t0 = Date(timeIntervalSince1970: 1772900000)
+        let shortStay = DayStay(
+            id: "short",
+            latitude: 37.77,
+            longitude: -122.41,
+            arrivalDate: t0,
+            departureDate: t0.addingTimeInterval(300), // 5 min
+            duration: 300.0,
+            horizontalAccuracy: 5.0
+        )
+        let longStay = DayStay(
+            id: "long",
+            latitude: 37.78,
+            longitude: -122.42,
+            arrivalDate: t0,
+            departureDate: t0.addingTimeInterval(14400), // 4 hours
+            duration: 14400.0,
+            horizontalAccuracy: 5.0
+        )
+
+        let shortHeat = DwellHeatOverlay.create(from: shortStay)
+        let longHeat = DwellHeatOverlay.create(from: longStay)
+
+        XCTAssertGreaterThan(longHeat.radius, shortHeat.radius, "Longer dwell must produce a larger heat overlay radius")
+        XCTAssertGreaterThan(shortHeat.radius, 15.0)
+    }
+
+    // MARK: - DayDetailView Model & Structure Tests
+
+    func testDayDetailTopFivePlacesTruncation() {
+        var places: [DayPlace] = []
+        let now = Date()
+        for i in 1...8 {
+            places.append(
+                DayPlace(
+                    id: "place_\(i)",
+                    label: "Place \(i)",
+                    latitude: 37.77 + Double(i) * 0.01,
+                    longitude: -122.41,
+                    totalDuration: Double(i * 600), // 10m, 20m, ..., 80m
+                    visitCount: 1,
+                    firstArrival: now,
+                    lastDeparture: now.addingTimeInterval(Double(i * 600))
+                )
+            )
+        }
+
+        let top5 = DayDetailView.topPlaces(from: places, limit: 5)
+        XCTAssertEqual(top5.count, 5, "Must truncate to exactly top 5 places")
+        XCTAssertEqual(top5.first?.label, "Place 8", "Highest duration place must be first")
+        XCTAssertEqual(top5.last?.label, "Place 4", "Fifth highest duration place must be last in top 5")
+    }
+
+    func testDayDetailDonutBreakdownSlices() {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "UTC")!
+        let day = cal.date(from: DateComponents(year: 2026, month: 6, day: 15))!
+        let now = day.addingTimeInterval(86400 * 2)
+
+        let history = DayHistory.build(points: [], selectedDate: day, now: now, calendar: cal)
+        let slices = DayDetailView.breakdownSlices(for: history)
+
+        XCTAssertEqual(slices.count, 3)
+        let total = slices.reduce(0.0) { $0 + $1.duration }
+        XCTAssertEqual(total, history.totalElapsedDuration, accuracy: 0.001)
+
+        let unknownSlice = slices.first(where: { $0.category == .unknown })
+        XCTAssertEqual(unknownSlice?.duration, 86400.0)
+    }
+
+    func testDistanceExcludesDwellJitterAndGaps() {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "UTC")!
+        let day = cal.date(from: DateComponents(year: 2026, month: 6, day: 15))!
+        let now = day.addingTimeInterval(86400 * 2)
+
+        // 100 jitter points at (37.7749, -122.4194) within 5m
+        var points: [TrajectoryPoint] = []
+        let dwellStart = day.addingTimeInterval(3600)
+        for i in 0...100 {
+            let jitterLat = 37.7749 + Double(i % 3 - 1) * 0.00002
+            let jitterLon = -122.4194 + Double(i % 3 - 1) * 0.00002
+            points.append(TrajectoryPoint(
+                latitude: jitterLat,
+                longitude: jitterLon,
+                timestamp: dwellStart.addingTimeInterval(Double(i * 10)),
+                horizontalAccuracy: 5.0
+            ))
+        }
+
+        let history = DayHistory.build(points: points, selectedDate: day, now: now, calendar: cal)
+        XCTAssertEqual(history.observedDistanceMeters, 0.0, "Stationary dwell jitter must not contribute to moving distance")
+        XCTAssertEqual(history.stays.count, 1)
+    }
+
+    func testFormatObservedBoundsAndDurations() {
+        let t1 = Date(timeIntervalSince1970: 1772900000)
+        let t2 = t1.addingTimeInterval(3600 + 1800) // 1h 30m
+
+        let boundsStr = DayHistory.formatObservedBounds(start: t1, end: t2)
+        XCTAssertTrue(boundsStr.hasPrefix("Observed"))
+        XCTAssertTrue(boundsStr.contains("–"))
+
+        let singleBounds = DayHistory.formatObservedBounds(start: t1, end: t1)
+        XCTAssertTrue(singleBounds.hasPrefix("Observed at"))
+
+        XCTAssertEqual(DayHistory.formatDistance(500.0), "500 m")
+        XCTAssertEqual(DayHistory.formatDistance(3850.0), "3.9 km")
+
+        XCTAssertEqual(DayHistory.formatDuration(0.0), "0m")
+        XCTAssertEqual(DayHistory.formatDuration(30.0), "< 1m")
+        XCTAssertEqual(DayHistory.formatDuration(300.0), "5m")
+        XCTAssertEqual(DayHistory.formatDuration(3600.0), "1h")
+        XCTAssertEqual(DayHistory.formatDuration(5400.0), "1h 30m")
+    }
+
+    func testCumulativeDistanceDisjointSeriesSegmentation() {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "UTC")!
+        let day = cal.date(from: DateComponents(year: 2026, month: 6, day: 15))!
+        let now = day.addingTimeInterval(86400 * 2)
+
+        // Two walking bouts separated by a 10-minute gap
+        var points: [TrajectoryPoint] = []
+        let walk1_start = day.addingTimeInterval(3600)
+        for i in 0...3 {
+            points.append(TrajectoryPoint(
+                latitude: 37.770 + Double(i) * 0.001,
+                longitude: -122.410,
+                timestamp: walk1_start.addingTimeInterval(Double(i * 5)),
+                horizontalAccuracy: 5.0
+            ))
+        }
+
+        let walk2_start = walk1_start.addingTimeInterval(600) // 10 min gap
+        for i in 0...3 {
+            points.append(TrajectoryPoint(
+                latitude: 37.780 + Double(i) * 0.001,
+                longitude: -122.410,
+                timestamp: walk2_start.addingTimeInterval(Double(i * 5)),
+                horizontalAccuracy: 5.0
+            ))
+        }
+
+        let history = DayHistory.build(points: points, selectedDate: day, now: now, calendar: cal)
+        XCTAssertEqual(history.cumulativeDistanceSeries.count, 2, "Disjoint walking bouts separated by gaps must yield separate series arrays")
+        XCTAssertEqual(history.cumulativeDistanceSeries[0].count, 4)
+        XCTAssertEqual(history.cumulativeDistanceSeries[1].count, 4)
+        XCTAssertGreaterThan(history.cumulativeDistanceSeries[1][0].distanceMeters, 0.0, "Second series must start at cumulative distance of first series")
+    }
+
+    func testEmptyDayRecenterCoordinatorHandling() {
+        let coordinator = TrajectoryMapView.Coordinator()
+        let mapView = MKMapView(frame: CGRect(x: 0, y: 0, width: 400, height: 600))
+
+        let didFrame = coordinator.updateMapOverlays(
+            mapView: mapView,
+            segments: [],
+            stays: [],
+            singleObservations: [],
+            rawPoints: [],
+            displayMode: .path,
+            dayKey: "empty_day",
+            forceRecenter: true
+        )
+
+        XCTAssertTrue(didFrame, "Framing on an empty day should complete without error")
+        XCTAssertEqual(mapView.overlays.count, 0)
+    }
 }

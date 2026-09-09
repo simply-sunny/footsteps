@@ -1,165 +1,140 @@
 import SwiftUI
 import SwiftData
 import CoreLocation
+import MapKit
 
-struct DailyTrackerView: View {
+/// Primary user-facing view with quiet full-bleed MapKit map, floating controls, and Path/Time modes.
+public struct DailyTrackerView: View {
     @ObservedObject private var locationManager = LocationManager.shared
     @AppStorage(LocationManager.trackingEnabledKey) private var isTrackingEnabled: Bool = true
     @AppStorage("showDiagnosticsMapOverlay") private var showDebugOverlay: Bool = false
     @Environment(\.scenePhase) private var scenePhase
+
     @State private var selectedDate: Date = Date()
     @State private var currentDateReference: Date = Date()
     @State private var selectedItemID: String? = nil
+    @State private var mapDisplayMode: MapDisplayMode = .path
+    @State private var isDetailPresented: Bool = false
     @State private var isSettingsPresented: Bool = false
+    @State private var isDatePickerPresented: Bool = false
+    @State private var recenterTrigger: Int = 0
 
     private var canGoNext: Bool {
         TrajectoryMath.canNavigateNext(from: selectedDate, now: currentDateReference)
     }
 
-    var body: some View {
-        VStack(spacing: 0) {
-            // Storage / tracking error banner
-            if let error = locationManager.lastError {
-                HStack(spacing: 8) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundColor(.yellow)
-                    Text(error)
-                        .font(.footnote)
-                        .lineLimit(2)
-                    Spacer()
-                    Button("Dismiss") {
-                        locationManager.lastError = nil
-                    }
-                    .font(.footnote.bold())
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(Color.red.opacity(0.15))
-            }
+    public init() {}
 
-            // Permissions & Precision Recovery Banners
-            if locationManager.authorizationStatus == .notDetermined {
-                HStack(spacing: 8) {
-                    Image(systemName: "location.circle.fill")
-                        .foregroundColor(.blue)
-                    Text("Enable location tracking to record footsteps.")
-                        .font(.footnote)
-                    Spacer()
-                    Button("Enable") {
-                        locationManager.requestPermissions()
-                    }
-                    .font(.footnote.bold())
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(Color.blue.opacity(0.1))
-            } else if locationManager.authorizationStatus == .authorizedWhenInUse {
-                HStack(spacing: 8) {
-                    Image(systemName: "location.fill")
-                        .foregroundColor(.blue)
-                    Text("Upgrade to Always authorization for background recording.")
-                        .font(.footnote)
-                    Spacer()
-                    Button("Upgrade") {
-                        locationManager.requestPermissions()
-                    }
-                    .font(.footnote.bold())
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(Color.blue.opacity(0.1))
-            } else if locationManager.authorizationStatus == .denied || locationManager.authorizationStatus == .restricted {
-                HStack(spacing: 8) {
-                    Image(systemName: "location.slash.fill")
-                        .foregroundColor(.red)
-                    Text("Location access is disabled. Enable in Settings.")
-                        .font(.footnote)
-                    Spacer()
-                    if let settingsURL = URL(string: UIApplication.openSettingsURLString) {
-                        Link("Settings", destination: settingsURL)
-                            .font(.footnote.bold())
-                    }
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(Color.red.opacity(0.15))
-            } else if locationManager.isReducedAccuracy {
-                HStack(spacing: 8) {
-                    Image(systemName: "scope")
-                        .foregroundColor(.orange)
-                    Text("Precise location is off. Full accuracy needed.")
-                        .font(.footnote)
-                    Spacer()
-                    Button("Enable Full") {
-                        locationManager.requestFullAccuracy()
-                    }
-                    .font(.footnote.bold())
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(Color.orange.opacity(0.15))
-            }
-
-            // Date Navigation Header
-            HStack {
-                Button(action: {
-                    selectedDate = TrajectoryMath.previousDay(from: selectedDate)
-                    selectedItemID = nil
-                }) {
-                    Image(systemName: "chevron.left")
-                        .font(.headline)
-                        .padding(8)
-                }
-                .accessibilityLabel("Previous Day")
-
-                Spacer()
-
-                DatePicker(
-                    "Select Date",
-                    selection: $selectedDate,
-                    in: ...currentDateReference,
-                    displayedComponents: .date
-                )
-                .labelsHidden()
-
-                Spacer()
-
-                Button(action: {
-                    if canGoNext {
-                        selectedDate = TrajectoryMath.nextDay(from: selectedDate)
-                        selectedItemID = nil
-                    }
-                }) {
-                    Image(systemName: "chevron.right")
-                        .font(.headline)
-                        .padding(8)
-                }
-                .disabled(!canGoNext)
-                .accessibilityLabel("Next Day")
-
-                Button(action: {
-                    isSettingsPresented = true
-                }) {
-                    Image(systemName: "gearshape")
-                        .font(.headline)
-                        .padding(8)
-                }
-                .accessibilityLabel("Settings")
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-            .background(Color(UIColor.secondarySystemBackground))
-
-            // Map content with predicate-filtered SwiftData query
+    public var body: some View {
+        ZStack(alignment: .top) {
+            // 1. Full-bleed Trajectory Map Container
             DailyTrajectoryContainerView(
                 selectedDate: selectedDate,
+                currentDateReference: currentDateReference,
+                mapDisplayMode: $mapDisplayMode,
+                recenterTrigger: recenterTrigger,
+                showDebugOverlay: showDebugOverlay,
                 selectedItemID: $selectedItemID,
-                isSettingsPresented: $isSettingsPresented,
-                showDebugOverlay: showDebugOverlay
+                isDetailPresented: $isDetailPresented,
+                isSettingsPresented: $isSettingsPresented
             )
             .id(TrajectoryMath.dayInterval(for: selectedDate).start)
             .animation(nil, value: selectedDate)
-            .edgesIgnoringSafeArea(.bottom)
+            .edgesIgnoringSafeArea(.all)
+
+            // 2. Top Status & Error Banners
+            VStack(spacing: 8) {
+                if let error = locationManager.lastError {
+                    HStack(spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundColor(.yellow)
+                        Text(error)
+                            .font(.footnote)
+                            .lineLimit(2)
+                        Spacer()
+                        Button("Dismiss") {
+                            locationManager.lastError = nil
+                        }
+                        .font(.footnote.bold())
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10))
+                    .padding(.horizontal, 16)
+                }
+
+                if locationManager.authorizationStatus == .notDetermined {
+                    HStack(spacing: 8) {
+                        Image(systemName: "location.circle.fill")
+                            .foregroundColor(.blue)
+                        Text("Enable location tracking to record footsteps.")
+                            .font(.footnote)
+                        Spacer()
+                        Button("Enable") {
+                            locationManager.requestPermissions()
+                        }
+                        .font(.footnote.bold())
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10))
+                    .padding(.horizontal, 16)
+                } else if locationManager.isReducedAccuracy {
+                    HStack(spacing: 8) {
+                        Image(systemName: "scope")
+                            .foregroundColor(.orange)
+                        Text("Precise location is off. Full accuracy needed.")
+                            .font(.footnote)
+                        Spacer()
+                        Button("Enable Full") {
+                            locationManager.requestFullAccuracy()
+                        }
+                        .font(.footnote.bold())
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10))
+                    .padding(.horizontal, 16)
+                }
+            }
+            .padding(.top, 54)
+            .zIndex(10)
+
+            // 3. Bottom Floating Controls Bar
+            VStack {
+                Spacer()
+                bottomControlsBar
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 24)
+            }
+            .zIndex(20)
+        }
+        .sheet(isPresented: $isDatePickerPresented) {
+            NavigationStack {
+                VStack(spacing: 20) {
+                    DatePicker(
+                        "Select Date",
+                        selection: $selectedDate,
+                        in: ...currentDateReference,
+                        displayedComponents: .date
+                    )
+                    .datePickerStyle(.graphical)
+                    .padding()
+
+                    Spacer()
+                }
+                .navigationTitle("Choose Day")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") {
+                            isDatePickerPresented = false
+                        }
+                        .font(.body.bold())
+                    }
+                }
+            }
+            .presentationDetents([.medium])
         }
         .onChange(of: isTrackingEnabled) { _, isEnabled in
             locationManager.setTrackingEnabled(isEnabled)
@@ -189,34 +164,154 @@ struct DailyTrackerView: View {
             selectedDate = now
         }
     }
+
+    // MARK: - Bottom Floating Controls Bar
+
+    private var bottomControlsBar: some View {
+        HStack(spacing: 12) {
+            // Recenter Button
+            Button(action: {
+                recenterTrigger += 1
+            }) {
+                Image(systemName: "location.north.line.fill")
+                    .font(.body.bold())
+                    .foregroundColor(.primary)
+                    .frame(width: 44, height: 44)
+                    .background(.ultraThinMaterial, in: Circle())
+                    .shadow(color: .black.opacity(0.12), radius: 6, x: 0, y: 3)
+            }
+            .accessibilityLabel("Recenter Map")
+
+            // Date Capsule with scrubbing gesture and tap picker
+            dateScrubbingCapsule
+
+            // Settings Button
+            Button(action: {
+                isSettingsPresented = true
+            }) {
+                Image(systemName: "gearshape")
+                    .font(.body.bold())
+                    .foregroundColor(.primary)
+                    .frame(width: 44, height: 44)
+                    .background(.ultraThinMaterial, in: Circle())
+                    .shadow(color: .black.opacity(0.12), radius: 6, x: 0, y: 3)
+            }
+            .accessibilityLabel("Settings")
+        }
+    }
+
+    private var dateScrubbingCapsule: some View {
+        HStack(spacing: 8) {
+            Button(action: {
+                selectedDate = TrajectoryMath.previousDay(from: selectedDate)
+                selectedItemID = nil
+            }) {
+                Image(systemName: "chevron.left")
+                    .font(.subheadline.bold())
+                    .foregroundColor(.primary)
+                    .padding(8)
+            }
+            .accessibilityLabel("Previous Day")
+
+            Spacer()
+
+            Button(action: {
+                isDatePickerPresented = true
+            }) {
+                HStack(spacing: 6) {
+                    Image(systemName: "calendar")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Text(formattedDateTitle(selectedDate))
+                        .font(.subheadline.bold())
+                        .foregroundColor(.primary)
+                }
+            }
+            .accessibilityLabel("Select Date")
+
+            Spacer()
+
+            Button(action: {
+                if canGoNext {
+                    selectedDate = TrajectoryMath.nextDay(from: selectedDate)
+                    selectedItemID = nil
+                }
+            }) {
+                Image(systemName: "chevron.right")
+                    .font(.subheadline.bold())
+                    .foregroundColor(canGoNext ? .primary : .secondary.opacity(0.4))
+                    .padding(8)
+            }
+            .disabled(!canGoNext)
+            .accessibilityLabel("Next Day")
+        }
+        .padding(.horizontal, 10)
+        .frame(height: 44)
+        .background(.ultraThinMaterial, in: Capsule())
+        .shadow(color: .black.opacity(0.12), radius: 6, x: 0, y: 3)
+        .gesture(
+            DragGesture(minimumDistance: 30)
+                .onEnded { value in
+                    if value.translation.width < -30 && canGoNext {
+                        selectedDate = TrajectoryMath.nextDay(from: selectedDate)
+                        selectedItemID = nil
+                    } else if value.translation.width > 30 {
+                        selectedDate = TrajectoryMath.previousDay(from: selectedDate)
+                        selectedItemID = nil
+                    }
+                }
+        )
+    }
+
+    private func formattedDateTitle(_ date: Date) -> String {
+        let calendar = Calendar.current
+        if calendar.isDateInToday(date) {
+            return "Today"
+        } else if calendar.isDateInYesterday(date) {
+            return "Yesterday"
+        } else {
+            return date.formatted(date: .abbreviated, time: .omitted)
+        }
+    }
 }
 
 /// Dynamic SwiftData container that executes a predicate query strictly for the selected calendar day.
-struct DailyTrajectoryContainerView: View {
+public struct DailyTrajectoryContainerView: View {
     let selectedDate: Date
-    @Binding var selectedItemID: String?
-    @Binding var isSettingsPresented: Bool
+    let currentDateReference: Date
+    @Binding var mapDisplayMode: MapDisplayMode
+    let recenterTrigger: Int
     let showDebugOverlay: Bool
+    @Binding var selectedItemID: String?
+    @Binding var isDetailPresented: Bool
+    @Binding var isSettingsPresented: Bool
+
     @Query private var dayPoints: [LocationPoint]
 
     @ObservedObject private var locationManager = LocationManager.shared
     @AppStorage(LocationManager.trackingEnabledKey) private var isTrackingEnabled: Bool = true
     @AppStorage("showDiagnosticsMapOverlay") private var isDebugOverlayEnabled: Bool = false
-    @State private var stepCount: Int? = nil
-    @State private var isLoadingSteps: Bool = false
-    @State private var queryTask: Task<Void, Never>? = nil
 
-    init(
+    public init(
         selectedDate: Date,
-        selectedItemID: Binding<String?> = .constant(nil),
-        isSettingsPresented: Binding<Bool> = .constant(false),
+        currentDateReference: Date = Date(),
+        mapDisplayMode: Binding<MapDisplayMode> = .constant(.path),
+        recenterTrigger: Int = 0,
         showDebugOverlay: Bool = false,
+        selectedItemID: Binding<String?> = .constant(nil),
+        isDetailPresented: Binding<Bool> = .constant(false),
+        isSettingsPresented: Binding<Bool> = .constant(false),
         calendar: Calendar = .current
     ) {
         self.selectedDate = selectedDate
-        self._selectedItemID = selectedItemID
-        self._isSettingsPresented = isSettingsPresented
+        self.currentDateReference = currentDateReference
+        self._mapDisplayMode = mapDisplayMode
+        self.recenterTrigger = recenterTrigger
         self.showDebugOverlay = showDebugOverlay
+        self._selectedItemID = selectedItemID
+        self._isDetailPresented = isDetailPresented
+        self._isSettingsPresented = isSettingsPresented
+
         let interval = TrajectoryMath.dayInterval(for: selectedDate, calendar: calendar)
         let start = interval.start
         let end = interval.end
@@ -230,7 +325,7 @@ struct DailyTrajectoryContainerView: View {
         )
     }
 
-    var body: some View {
+    public var body: some View {
         let trajectoryPoints = dayPoints.map {
             TrajectoryPoint(
                 latitude: $0.latitude,
@@ -252,11 +347,23 @@ struct DailyTrajectoryContainerView: View {
                 isBackground: $0.isBackground
             )
         }
-        let dayAnalysis = TrajectoryMath.analyzeDay(points: trajectoryPoints)
+
+        let history = DayHistory.build(
+            points: trajectoryPoints,
+            selectedDate: selectedDate,
+            now: currentDateReference
+        )
         let dayKey = String(Int64(TrajectoryMath.dayInterval(for: selectedDate).start.timeIntervalSince1970))
 
-        let selectedSegment = dayAnalysis.segments.first(where: { $0.id == selectedItemID })
-        let selectedSingleton = dayAnalysis.singletons.first(where: { $0.id == selectedItemID })
+        let selectedStay = history.stays.first(where: { $0.id == selectedItemID })
+        let selectedSegment = history.movingSegments.first(where: { $0.id == selectedItemID })
+        let selectedObs: TrajectoryPoint? = {
+            guard let id = selectedItemID, id.hasPrefix("obs_") else { return nil }
+            return history.singleObservations.first(where: {
+                let tsMs = Int64($0.timestamp.timeIntervalSince1970 * 1000)
+                return "obs_\(tsMs)" == id
+            })
+        }()
         let selectedDebugPoint: (point: TrajectoryPoint, gap: TimeInterval?)? = {
             guard let id = selectedItemID, id.hasPrefix("raw_") else { return nil }
             let sorted = trajectoryPoints.sorted { $0.timestamp < $1.timestamp }
@@ -274,28 +381,64 @@ struct DailyTrajectoryContainerView: View {
             return nil
         }()
 
-        ZStack {
+        ZStack(alignment: .top) {
+            // Map
             TrajectoryMapView(
-                segments: dayAnalysis.segments,
-                singletons: dayAnalysis.singletons,
+                segments: history.movingSegments,
+                stays: history.stays,
+                singleObservations: history.singleObservations,
+                singletons: [],
                 rawPoints: trajectoryPoints,
+                displayMode: mapDisplayMode,
                 showDebugOverlay: showDebugOverlay,
                 dayKey: dayKey,
-                selectedSegmentID: $selectedItemID
+                recenterTrigger: recenterTrigger,
+                selectedItemID: $selectedItemID
             )
 
-            if dayPoints.isEmpty {
-                Text("No data for this day.")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
+            // Top Summary Bar & Mode Toggle
+            VStack(spacing: 10) {
+                HStack(spacing: 12) {
+                    // Summary Capsule (Tapping opens Day Detail)
+                    Button(action: {
+                        isDetailPresented = true
+                    }) {
+                        HStack(spacing: 8) {
+                            summaryPillContent(history: history)
+                            Image(systemName: "chevron.right")
+                                .font(.caption2.bold())
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(.ultraThinMaterial, in: Capsule())
+                        .shadow(color: .black.opacity(0.12), radius: 6, x: 0, y: 3)
+                    }
+                    .accessibilityLabel("Day Summary: \(DayHistory.formatDistance(history.observedDistanceMeters)), \(history.places.count) places")
+
+                    Spacer()
+
+                    // Path | Time Toggle
+                    Picker("Display Mode", selection: $mapDisplayMode) {
+                        ForEach(MapDisplayMode.allCases) { mode in
+                            Text(mode.rawValue).tag(mode)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(width: 130)
                     .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
+                    .shadow(color: .black.opacity(0.10), radius: 4, x: 0, y: 2)
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 58)
             }
         }
+        .sheet(isPresented: $isDetailPresented) {
+            DayDetailView(history: history)
+        }
         .sheet(isPresented: $isSettingsPresented) {
-            SettingsAndDiagnosticsView(
-                analysis: dayAnalysis,
+            UserSettingsView(
+                analysis: TrajectoryMath.analyzeDay(points: trajectoryPoints),
                 selectedDate: selectedDate,
                 isTrackingEnabled: $isTrackingEnabled,
                 showDebugOverlay: $isDebugOverlayEnabled
@@ -303,25 +446,22 @@ struct DailyTrajectoryContainerView: View {
             .presentationDetents([.medium, .large])
         }
         .sheet(isPresented: Binding(
-            get: { selectedItemID != nil && (selectedSegment != nil || selectedSingleton != nil || selectedDebugPoint != nil) },
-            set: { isPresented in
-                if !isPresented {
-                    selectedItemID = nil
-                }
-            }
+            get: { selectedItemID != nil && (selectedStay != nil || selectedSegment != nil || selectedObs != nil || selectedDebugPoint != nil) },
+            set: { if !$0 { selectedItemID = nil } }
         )) {
-            if let segment = selectedSegment {
-                SegmentDetailCardView(
-                    segment: segment,
-                    stepCount: stepCount,
-                    isLoadingSteps: isLoadingSteps
-                )
-                .presentationDetents([.fraction(0.22), .medium])
-                .presentationDragIndicator(.visible)
-                .presentationBackgroundInteraction(.enabled(upThrough: .medium))
-            } else if let singleton = selectedSingleton {
-                SingletonDetailCardView(singleton: singleton)
-                    .presentationDetents([.fraction(0.22), .medium])
+            if let stay = selectedStay {
+                StayDetailCardView(stay: stay)
+                    .presentationDetents([.fraction(0.24), .medium])
+                    .presentationDragIndicator(.visible)
+                    .presentationBackgroundInteraction(.enabled(upThrough: .medium))
+            } else if let segment = selectedSegment {
+                SegmentDetailCardView(segment: segment)
+                    .presentationDetents([.fraction(0.24), .medium])
+                    .presentationDragIndicator(.visible)
+                    .presentationBackgroundInteraction(.enabled(upThrough: .medium))
+            } else if let obs = selectedObs {
+                SingleObservationDetailCardView(point: obs)
+                    .presentationDetents([.fraction(0.20), .medium])
                     .presentationDragIndicator(.visible)
                     .presentationBackgroundInteraction(.enabled(upThrough: .medium))
             } else if let debugInfo = selectedDebugPoint {
@@ -331,66 +471,61 @@ struct DailyTrajectoryContainerView: View {
                     .presentationBackgroundInteraction(.enabled(upThrough: .medium))
             }
         }
-        .onChange(of: selectedItemID) { _, newID in
-            queryTask?.cancel()
-            stepCount = nil
+    }
 
-            guard let newID = newID,
-                  let matchingSegment = dayAnalysis.segments.first(where: { $0.id == newID }) else {
-                isLoadingSteps = false
-                return
-            }
-
-            isLoadingSteps = true
-            let start = matchingSegment.startDate
-            let end = matchingSegment.endDate
-
-            queryTask = Task {
-                let count = await StepCountReader.shared.fetchStepCount(startDate: start, endDate: end)
-                guard !Task.isCancelled, selectedItemID == newID else { return }
-                self.stepCount = count
-                self.isLoadingSteps = false
-            }
+    @ViewBuilder
+    private func summaryPillContent(history: DayHistory) -> some View {
+        if history.observedDistanceMeters > 0 || !history.places.isEmpty {
+            Text("\(DayHistory.formatDistance(history.observedDistanceMeters)) · \(history.places.count) \(history.places.count == 1 ? "place" : "places") · \(DayHistory.formatDuration(history.movingDuration))")
+                .font(.footnote.bold())
+                .foregroundColor(.primary)
+        } else if !history.singleObservations.isEmpty {
+            Text("1 fix recorded")
+                .font(.footnote.bold())
+                .foregroundColor(.secondary)
+        } else {
+            Text("No activity recorded")
+                .font(.footnote.bold())
+                .foregroundColor(.secondary)
         }
     }
 }
 
-/// Compact bottom card presenting exact details for the tapped trajectory segment.
-struct SegmentDetailCardView: View {
-    let segment: TrajectorySegment
-    let stepCount: Int?
-    let isLoadingSteps: Bool
+// MARK: - Tap Detail Cards
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+/// Clean card displaying neutral place details for a tapped stay.
+public struct StayDetailCardView: View {
+    public let stay: DayStay
+
+    public var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 8) {
-                Image(systemName: "clock.fill")
-                    .foregroundColor(.accentColor)
-                    .font(.subheadline)
-                Text(StepCountReader.formatTimeInterval(start: segment.startDate, end: segment.endDate))
-                    .font(.headline)
-            }
-
-            HStack(spacing: 24) {
-                HStack(spacing: 6) {
-                    Image(systemName: "timer")
-                        .foregroundColor(.secondary)
-                    Text(StepCountReader.formatDurationMinutes(segment.duration))
+                Image(systemName: "mappin.circle.fill")
+                    .foregroundColor(.orange)
+                    .font(.title3)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(stay.assignedPlaceLabel ?? "Stationary Dwell")
+                        .font(.headline)
+                    Text(DayHistory.formatObservedBounds(start: stay.arrivalDate, end: stay.departureDate))
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                 }
+            }
+
+            HStack(spacing: 20) {
+                HStack(spacing: 6) {
+                    Image(systemName: "hourglass")
+                        .foregroundColor(.secondary)
+                    Text(DayHistory.formatDuration(stay.duration))
+                        .font(.subheadline.bold())
+                }
 
                 HStack(spacing: 6) {
-                    Image(systemName: "figure.walk")
+                    Image(systemName: "scope")
                         .foregroundColor(.secondary)
-                    if isLoadingSteps {
-                        ProgressView()
-                            .scaleEffect(0.8)
-                    } else {
-                        Text(StepCountReader.formatStepCount(stepCount))
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                    }
+                    Text(String(format: "±%.1fm accuracy", stay.horizontalAccuracy))
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
                 }
             }
         }
@@ -400,51 +535,74 @@ struct SegmentDetailCardView: View {
     }
 }
 
-/// Compact bottom card presenting details for an isolated singleton or stationary dwell observation.
-struct SingletonDetailCardView: View {
-    let singleton: TrajectorySingleton
+/// Clean card displaying details for a tapped moving trajectory segment.
+public struct SegmentDetailCardView: View {
+    public let segment: TrajectorySegment
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+    public var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 8) {
-                Image(systemName: "mappin.circle.fill")
-                    .foregroundColor(.accentColor)
-                    .font(.subheadline)
-                Text(singleton.point.timestamp.formatted(date: .omitted, time: .shortened))
-                    .font(.headline)
-                Text(singleton.observationDuration > 0 ? "Stationary Dwell" : "Isolated Fix")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-            }
-
-            HStack(spacing: 24) {
-                HStack(spacing: 6) {
-                    Image(systemName: "scope")
-                        .foregroundColor(.secondary)
-                    Text(String(format: "±%.1fm accuracy", singleton.point.horizontalAccuracy))
+                Image(systemName: "figure.walk.circle.fill")
+                    .foregroundColor(.blue)
+                    .font(.title3)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Moving Trajectory")
+                        .font(.headline)
+                    Text(DayHistory.formatObservedBounds(start: segment.startDate, end: segment.endDate))
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                 }
+            }
 
-                if singleton.observationDuration > 0 {
-                    HStack(spacing: 6) {
-                        Image(systemName: "hourglass")
-                            .foregroundColor(.secondary)
-                        Text(StepCountReader.formatDurationMinutes(singleton.observationDuration))
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                    }
+            HStack(spacing: 20) {
+                HStack(spacing: 6) {
+                    Image(systemName: "figure.walk")
+                        .foregroundColor(.secondary)
+                    Text(DayHistory.formatDistance(segment.distanceMeters))
+                        .font(.subheadline.bold())
                 }
 
-                if let alt = singleton.point.altitude {
-                    HStack(spacing: 6) {
-                        Image(systemName: "mountain.2")
-                            .foregroundColor(.secondary)
-                        Text(String(format: "%.0fm alt", alt))
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                    }
+                HStack(spacing: 6) {
+                    Image(systemName: "timer")
+                        .foregroundColor(.secondary)
+                    Text(DayHistory.formatDuration(segment.duration))
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
                 }
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// Clean card displaying an isolated observation without inferred stay duration.
+public struct SingleObservationDetailCardView: View {
+    public let point: TrajectoryPoint
+
+    public var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "smallcircle.filled.circle")
+                    .foregroundColor(.gray)
+                    .font(.title3)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Single Observation")
+                        .font(.headline)
+                    Text("Observed at \(point.timestamp.formatted(date: .omitted, time: .shortened))")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+            }
+
+            HStack(spacing: 16) {
+                Text(String(format: "±%.1fm accuracy", point.horizontalAccuracy))
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                Text("No stay duration inferred")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
             }
         }
         .padding(.horizontal, 20)
@@ -454,9 +612,9 @@ struct SingletonDetailCardView: View {
 }
 
 /// Diagnostic bottom card presenting per-point evidence when inspecting raw points in debug mode.
-struct DebugPointDetailCardView: View {
-    let point: TrajectoryPoint
-    let gapFromPrevious: TimeInterval?
+public struct DebugPointDetailCardView: View {
+    public let point: TrajectoryPoint
+    public let gapFromPrevious: TimeInterval?
 
     private var statusBadge: (text: String, color: Color) {
         if !TrajectoryMath.isValid(point: point, maxHorizontalAccuracy: TrajectoryMath.defaultMaxHorizontalAccuracy) {
@@ -468,7 +626,7 @@ struct DebugPointDetailCardView: View {
         }
     }
 
-    var body: some View {
+    public var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text(point.timestamp.formatted(date: .omitted, time: .standard))
@@ -497,24 +655,6 @@ struct DebugPointDetailCardView: View {
                         .foregroundColor(.secondary)
                 }
             }
-
-            HStack(spacing: 16) {
-                let lifecycleText = (point.isBackground == true) ? "Background" : ((point.isBackground == false) ? "Foreground" : "Unknown Lifecycle")
-                Text(lifecycleText)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-
-                if point.isSimulatedBySoftware == true {
-                    Text("Software Simulated")
-                        .font(.caption)
-                        .foregroundColor(.purple)
-                }
-                if point.isProducedByAccessory == true {
-                    Text("Accessory Source")
-                        .font(.caption)
-                        .foregroundColor(.indigo)
-                }
-            }
         }
         .padding(.horizontal, 20)
         .padding(.top, 16)
@@ -522,18 +662,61 @@ struct DebugPointDetailCardView: View {
     }
 }
 
-/// Settings and diagnostic sheet presenting tracking preferences, permissions, and live telemetry.
-struct SettingsAndDiagnosticsView: View {
-    let analysis: TrajectoryDayAnalysis
-    let selectedDate: Date
-    @Binding var isTrackingEnabled: Bool
-    @Binding var showDebugOverlay: Bool
+// MARK: - User Settings & Sequestered Developer Diagnostics
+
+/// Clean user-facing settings view.
+public struct UserSettingsView: View {
+    public let analysis: TrajectoryDayAnalysis
+    public let selectedDate: Date
+    @Binding public var isTrackingEnabled: Bool
+    @Binding public var showDebugOverlay: Bool
     @ObservedObject private var locationManager = LocationManager.shared
     @Environment(\.dismiss) private var dismiss
 
+    public var body: some View {
+        NavigationStack {
+            Form {
+                Section("Tracking") {
+                    Toggle("Background Recording", isOn: $isTrackingEnabled)
+                    LabeledContent("Status", value: authStatusText)
+                    LabeledContent("Precision", value: accuracyText)
+                    if locationManager.isReducedAccuracy {
+                        Button("Request Full Accuracy") {
+                            locationManager.requestFullAccuracy()
+                        }
+                    }
+                }
+
+                Section {
+                    NavigationLink(destination: DeveloperDiagnosticsView(
+                        analysis: analysis,
+                        selectedDate: selectedDate,
+                        showDebugOverlay: $showDebugOverlay
+                    )) {
+                        HStack {
+                            Image(systemName: "wrench.and.screwdriver")
+                                .foregroundColor(.secondary)
+                            Text("Developer Diagnostics")
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Settings")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                    .font(.body.bold())
+                }
+            }
+        }
+    }
+
     private var authStatusText: String {
         switch locationManager.authorizationStatus {
-        case .authorizedAlways: return "Always"
+        case .authorizedAlways: return "Always Authorized"
         case .authorizedWhenInUse: return "When In Use"
         case .denied: return "Denied"
         case .restricted: return "Restricted"
@@ -548,69 +731,49 @@ struct SettingsAndDiagnosticsView: View {
         }
         return "Standard"
     }
+}
 
-    var body: some View {
-        NavigationStack {
-            Form {
-                Section("Tracking & Permissions") {
-                    Toggle("Background Tracking", isOn: $isTrackingEnabled)
-                    LabeledContent("Authorization", value: authStatusText)
-                    LabeledContent("Precision", value: accuracyText)
-                    if locationManager.isReducedAccuracy {
-                        Button("Request Full Accuracy") {
-                            locationManager.requestFullAccuracy()
-                        }
-                    }
-                    LabeledContent("Active Session", value: String(locationManager.sessionID.prefix(8)))
-                }
+/// Hidden Developer Diagnostics view sequestered away from normal user UI.
+public struct DeveloperDiagnosticsView: View {
+    public let analysis: TrajectoryDayAnalysis
+    public let selectedDate: Date
+    @Binding public var showDebugOverlay: Bool
+    @ObservedObject private var locationManager = LocationManager.shared
 
-                Section("Diagnostics Map Overlay") {
-                    Toggle("Show Diagnostics Map Overlay", isOn: $showDebugOverlay)
-                }
-
-                Section("Day Diagnostics (\(selectedDate.formatted(date: .abbreviated, time: .omitted)))") {
-                    LabeledContent("Raw Fixes Recorded", value: "\(analysis.rawCount)")
-                    LabeledContent("Usable Fixes", value: "\(analysis.usableCount)")
-                    LabeledContent("Suspicious (100–200m)", value: "\(analysis.suspiciousCount)")
-                    LabeledContent("Outliers (>200m / NaN)", value: "\(analysis.outlierCount)")
-                    LabeledContent("Continuous Segments", value: "\(analysis.segments.count)")
-                    LabeledContent("Preserved Singletons / Dwells", value: "\(analysis.singletons.count)")
-                    LabeledContent("Gaps (>30s)", value: "\(analysis.gapCount)")
-                    if analysis.gapCount > 0 {
-                        let gapStr = analysis.maxGapSeconds >= 60.0
-                            ? String(format: "%.1f min", analysis.maxGapSeconds / 60.0)
-                            : String(format: "%.0fs", analysis.maxGapSeconds)
-                        LabeledContent("Max Gap Duration", value: gapStr)
-                    }
-                    LabeledContent("Median Accuracy", value: String(format: "%.1f m", analysis.medianAccuracy))
-                    LabeledContent("Worst Accuracy", value: String(format: "%.1f m", analysis.worstAccuracy))
-                    LabeledContent("Lifecycle Breakdown", value: "\(analysis.backgroundCount) bg / \(analysis.foregroundCount) fg / \(analysis.unknownLifecycleCount) unk")
-                }
-
-                Section("Sensor Telemetry & Health") {
-                    LabeledContent("Transient CLErrors", value: "\(locationManager.locationUnknownCount) locationUnknown events")
-                    if let lastDate = locationManager.lastLocationUnknownDate {
-                        LabeledContent("Last Signal Search", value: lastDate.formatted(date: .omitted, time: .shortened))
-                    }
-                }
-
-                if let error = locationManager.lastError {
-                    Section("Diagnostics Alert") {
-                        Text(error)
-                            .font(.footnote)
-                            .foregroundColor(.red)
-                    }
-                }
+    public var body: some View {
+        Form {
+            Section("Diagnostics Map Overlay") {
+                Toggle("Show Raw Points Overlay", isOn: $showDebugOverlay)
             }
-            .navigationTitle("Settings & Diagnostics")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") {
-                        dismiss()
-                    }
+
+            Section("Day Fixes (\(selectedDate.formatted(date: .abbreviated, time: .omitted)))") {
+                LabeledContent("Raw Fixes Ingested", value: "\(analysis.rawCount)")
+                LabeledContent("Usable Fixes (≤100m)", value: "\(analysis.usableCount)")
+                LabeledContent("Suspicious (100–200m)", value: "\(analysis.suspiciousCount)")
+                LabeledContent("Outliers (>200m / NaN)", value: "\(analysis.outlierCount)")
+                LabeledContent("Moving Segments", value: "\(analysis.segments.count)")
+                LabeledContent("Preserved Dwells/Singletons", value: "\(analysis.singletons.count)")
+                LabeledContent("Timeline Gaps (>30s)", value: "\(analysis.gapCount)")
+                if analysis.gapCount > 0 {
+                    let gapStr = analysis.maxGapSeconds >= 60.0
+                        ? String(format: "%.1f min", analysis.maxGapSeconds / 60.0)
+                        : String(format: "%.0fs", analysis.maxGapSeconds)
+                    LabeledContent("Max Gap Duration", value: gapStr)
                 }
+                LabeledContent("Median Accuracy", value: String(format: "%.1f m", analysis.medianAccuracy))
+                LabeledContent("Worst Accuracy", value: String(format: "%.1f m", analysis.worstAccuracy))
+                LabeledContent("Lifecycle Breakdown", value: "\(analysis.backgroundCount) bg / \(analysis.foregroundCount) fg / \(analysis.unknownLifecycleCount) unk")
+            }
+
+            Section("Sensor Health") {
+                LabeledContent("Transient Errors", value: "\(locationManager.locationUnknownCount) locationUnknown events")
+                if let lastDate = locationManager.lastLocationUnknownDate {
+                    LabeledContent("Last Signal Search", value: lastDate.formatted(date: .omitted, time: .shortened))
+                }
+                LabeledContent("Active Session ID", value: String(locationManager.sessionID.prefix(8)))
             }
         }
+        .navigationTitle("Developer Diagnostics")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
