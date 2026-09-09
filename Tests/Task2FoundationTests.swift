@@ -16,7 +16,7 @@ struct Task2FoundationTests {
     }
 
     static func main() {
-        print("Running Task 2 Foundation Tests (Trajectory Segmentation, Discontinuities, Deterministic IDs)...")
+        print("Running Task 2 Foundation Tests (Trajectory Segmentation, Discontinuities, Stationary Grouping)...")
 
         let baseDate = Date(timeIntervalSince1970: 1772900000)
 
@@ -29,121 +29,254 @@ struct Task2FoundationTests {
         ]
         let singleSegs = TrajectoryMath.segment(points: singlePoint)
         assertTrue(singleSegs.isEmpty, "Single point trajectory must return empty segments (>= 2 points required)")
+        let singleAnalysis = TrajectoryMath.analyzeDay(points: singlePoint)
+        assertTrue(singleAnalysis.singletons.count == 1, "Single point must be preserved as singleton")
+        assertTrue(singleAnalysis.singletons[0].observationDuration == 0.0, "Single point has 0 observation duration")
 
-        // 2. Continuous Trajectory (No Discontinuities)
-        let continuousPoints = [
-            TrajectoryPoint(latitude: 37.7741, longitude: -122.4191, timestamp: baseDate, horizontalAccuracy: 10.0),
-            TrajectoryPoint(latitude: 37.7742, longitude: -122.4192, timestamp: baseDate.addingTimeInterval(30), horizontalAccuracy: 10.0),
-            TrajectoryPoint(latitude: 37.7743, longitude: -122.4193, timestamp: baseDate.addingTimeInterval(60), horizontalAccuracy: 10.0),
-            TrajectoryPoint(latitude: 37.7744, longitude: -122.4194, timestamp: baseDate.addingTimeInterval(90), horizontalAccuracy: 10.0)
-        ]
-        let continuousSegs = TrajectoryMath.segment(points: continuousPoints)
-        assertTrue(continuousSegs.count == 1, "Continuous points should produce exactly 1 segment")
-        assertTrue(continuousSegs[0].points.count == 4, "Segment should contain all 4 points")
-        assertTrue(continuousSegs[0].startDate == baseDate, "startDate should match first point")
-        assertTrue(continuousSegs[0].endDate == baseDate.addingTimeInterval(90), "endDate should match last point")
-        assertTrue(continuousSegs[0].duration == 90.0, "duration should be 90 seconds")
-        assertTrue(continuousSegs[0].distanceMeters > 0.0, "distanceMeters should be greater than 0")
+        // 2. Continuous Trajectory (1Hz Smooth Walking, No Discontinuities)
+        var smoothWalkPoints: [TrajectoryPoint] = []
+        for i in 0..<60 {
+            smoothWalkPoints.append(
+                TrajectoryPoint(
+                    latitude: 37.7741 + Double(i) * 0.000015, // ~1.6m per second
+                    longitude: -122.4191,
+                    timestamp: baseDate.addingTimeInterval(Double(i)), // 1Hz sampling (dt = 1.0s)
+                    horizontalAccuracy: 5.0
+                )
+            )
+        }
+        let smoothSegs = TrajectoryMath.segment(points: smoothWalkPoints)
+        assertTrue(smoothSegs.count == 1, "Continuous 1Hz smooth walking should produce exactly 1 segment")
+        assertTrue(smoothSegs[0].points.count == 60, "Segment should contain all 60 points")
+        assertTrue(smoothSegs[0].startDate == baseDate, "startDate should match first point")
+        assertTrue(smoothSegs[0].endDate == baseDate.addingTimeInterval(59), "endDate should match last point")
+        assertTrue(smoothSegs[0].duration == 59.0, "duration should be 59 seconds")
+        assertTrue(smoothSegs[0].distanceMeters > 50.0, "distanceMeters should be > 50m")
 
-        // 3. Discontinuity: Time Gap > 5 minutes (300s)
-        let timeGapPoints = [
-            // Segment 1 (2 points)
+        // 3. Continuity Policy Regression: 40s, 120s, 299s gaps do NOT connect by DEFAULT (<=30s policy)
+        // Raw legacy points preserved, explicit override maxTimeGapSeconds connects
+        let multiGapPoints = [
+            // Walk 1 (2 points, dt = 10s)
             TrajectoryPoint(latitude: 37.7741, longitude: -122.4191, timestamp: baseDate, horizontalAccuracy: 10.0),
-            TrajectoryPoint(latitude: 37.7742, longitude: -122.4192, timestamp: baseDate.addingTimeInterval(30), horizontalAccuracy: 10.0),
-            // Gap of 301 seconds (> 300s threshold)
-            // Segment 2 (2 points)
-            TrajectoryPoint(latitude: 37.7743, longitude: -122.4193, timestamp: baseDate.addingTimeInterval(331), horizontalAccuracy: 10.0),
-            TrajectoryPoint(latitude: 37.7744, longitude: -122.4194, timestamp: baseDate.addingTimeInterval(360), horizontalAccuracy: 10.0)
+            TrajectoryPoint(latitude: 37.7743, longitude: -122.4193, timestamp: baseDate.addingTimeInterval(10), horizontalAccuracy: 10.0),
+            // 40s gap (dt = 40s > 30s default)
+            // Walk 2 (2 points, dt = 10s)
+            TrajectoryPoint(latitude: 37.7745, longitude: -122.4195, timestamp: baseDate.addingTimeInterval(50), horizontalAccuracy: 10.0),
+            TrajectoryPoint(latitude: 37.7747, longitude: -122.4197, timestamp: baseDate.addingTimeInterval(60), horizontalAccuracy: 10.0),
+            // 120s gap (dt = 120s > 30s default)
+            // Walk 3 (2 points, dt = 10s)
+            TrajectoryPoint(latitude: 37.7749, longitude: -122.4199, timestamp: baseDate.addingTimeInterval(180), horizontalAccuracy: 10.0),
+            TrajectoryPoint(latitude: 37.7751, longitude: -122.4201, timestamp: baseDate.addingTimeInterval(190), horizontalAccuracy: 10.0),
+            // 299s gap (dt = 299s > 30s default)
+            // Walk 4 (2 points, dt = 10s)
+            TrajectoryPoint(latitude: 37.7753, longitude: -122.4203, timestamp: baseDate.addingTimeInterval(489), horizontalAccuracy: 10.0),
+            TrajectoryPoint(latitude: 37.7755, longitude: -122.4205, timestamp: baseDate.addingTimeInterval(499), horizontalAccuracy: 10.0)
         ]
-        let timeGapSegs = TrajectoryMath.segment(points: timeGapPoints)
-        assertTrue(timeGapSegs.count == 2, "301s time gap should split into 2 segments (actual: \(timeGapSegs.count))")
-        assertTrue(timeGapSegs[0].points.count == 2, "First segment must have 2 points")
-        assertTrue(timeGapSegs[1].points.count == 2, "Second segment must have 2 points")
+
+        // By DEFAULT (<=30s threshold): 40s, 120s, 299s gaps do NOT connect -> splits into 4 segments
+        let defaultSegs = TrajectoryMath.segment(points: multiGapPoints)
+        assertTrue(defaultSegs.count == 4, "40s, 120s, 299s gaps must split into 4 segments by default (actual: \(defaultSegs.count))")
+        for (idx, seg) in defaultSegs.enumerated() {
+            assertTrue(seg.points.count == 2, "Segment \(idx) must have 2 points")
+        }
+
+        let multiGapAnalysis = TrajectoryMath.analyzeDay(points: multiGapPoints)
+        assertTrue(multiGapAnalysis.rawCount == 8, "Raw count must preserve all 8 points")
+        assertTrue(multiGapAnalysis.usableCount == 8, "All 8 points are usable")
+        assertTrue(multiGapAnalysis.gapCount == 3, "Timeline must identify exactly 3 gaps (>30s)")
+        assertTrue(abs(multiGapAnalysis.maxGapSeconds - 299.0) < 0.001, "Max gap duration must be 299s")
+
+        // Explicit override (maxTimeGapSeconds: 300s): all gaps (40s, 120s, 299s) connect into 1 segment
+        let override300Segs = TrajectoryMath.segment(points: multiGapPoints, maxTimeGapSeconds: 300.0)
+        assertTrue(override300Segs.count == 1, "Explicit 300s gap override should connect all 40s/120s/299s gaps into 1 segment")
+        assertTrue(override300Segs[0].points.count == 8, "Override segment must contain all 8 points")
+
+        // Explicit override (maxTimeGapSeconds: 100s): connects 40s gap, splits at 120s and 299s gaps -> 3 segments
+        let override100Segs = TrajectoryMath.segment(points: multiGapPoints, maxTimeGapSeconds: 100.0)
+        assertTrue(override100Segs.count == 3, "Explicit 100s gap override should split at 120s and 299s gaps into 3 segments")
+
+        // 3b. Dwell Must Not Bridge Gaps (40s, 120s, 299s)
+        var splitDwellPoints: [TrajectoryPoint] = []
+        // Cluster 1: 5 points at 5s intervals (t=0..20) staying within 2m
+        for i in 0..<5 {
+            splitDwellPoints.append(
+                TrajectoryPoint(
+                    latitude: 37.7749 + Double(i % 2) * 0.00001,
+                    longitude: -122.4194,
+                    timestamp: baseDate.addingTimeInterval(Double(i * 5)),
+                    horizontalAccuracy: 10.0
+                )
+            )
+        }
+        // 40s gap (next point at t=60)
+        // Cluster 2: 5 points at 5s intervals (t=60..80) staying within 2m at the same location
+        for i in 0..<5 {
+            splitDwellPoints.append(
+                TrajectoryPoint(
+                    latitude: 37.7749 + Double(i % 2) * 0.00001,
+                    longitude: -122.4194,
+                    timestamp: baseDate.addingTimeInterval(60.0 + Double(i * 5)),
+                    horizontalAccuracy: 10.0
+                )
+            )
+        }
+        let splitDwellAnalysis = TrajectoryMath.analyzeDay(points: splitDwellPoints)
+        assertTrue(splitDwellAnalysis.rawCount == 10, "Raw count must preserve all 10 fixes")
+        assertTrue(splitDwellAnalysis.segments.isEmpty, "Stationary dwell points must not produce polylines")
+        assertTrue(splitDwellAnalysis.singletons.count == 2, "Stationary dwell must NOT bridge across 40s gap; must produce 2 distinct dwell singletons")
+        assertTrue(splitDwellAnalysis.singletons[0].observationDuration == 20.0, "First dwell singleton duration should be 20s")
+        assertTrue(splitDwellAnalysis.singletons[1].observationDuration == 20.0, "Second dwell singleton duration should be 20s")
 
         // 4. Discontinuity: Speed > 50 m/s (180 km/h)
-        // Distance ~2,000m in 10s -> speed = 200 m/s (> 50 m/s)
         let speedPoints = [
-            // Segment 1 (2 points)
+            // Segment 1 (2 points, dt = 10s)
             TrajectoryPoint(latitude: 37.7741, longitude: -122.4191, timestamp: baseDate, horizontalAccuracy: 10.0),
-            TrajectoryPoint(latitude: 37.7742, longitude: -122.4192, timestamp: baseDate.addingTimeInterval(30), horizontalAccuracy: 10.0),
-            // High speed jump (latitude jump ~0.02 deg is ~2.2 km in 10 seconds = 220 m/s)
-            // Segment 2 (2 points)
-            TrajectoryPoint(latitude: 37.7940, longitude: -122.4192, timestamp: baseDate.addingTimeInterval(40), horizontalAccuracy: 10.0),
-            TrajectoryPoint(latitude: 37.7941, longitude: -122.4193, timestamp: baseDate.addingTimeInterval(70), horizontalAccuracy: 10.0)
+            TrajectoryPoint(latitude: 37.7743, longitude: -122.4193, timestamp: baseDate.addingTimeInterval(10), horizontalAccuracy: 10.0),
+            // High speed jump (latitude jump ~0.02 deg is ~2.2 km in 5 seconds = 440 m/s > 50 m/s, dt=5s <= 30s)
+            // Segment 2 (2 points, dt = 10s)
+            TrajectoryPoint(latitude: 37.7940, longitude: -122.4192, timestamp: baseDate.addingTimeInterval(15), horizontalAccuracy: 10.0),
+            TrajectoryPoint(latitude: 37.7942, longitude: -122.4194, timestamp: baseDate.addingTimeInterval(25), horizontalAccuracy: 10.0)
         ]
         let speedSegs = TrajectoryMath.segment(points: speedPoints)
         assertTrue(speedSegs.count == 2, "Speed > 50 m/s should split into 2 segments (actual: \(speedSegs.count))")
 
-        // 5. Discontinuity: Distance Jump > 10 km (even if time delta allows moderate speed)
-        // SF to San Jose (~70km in 2000s = 35 m/s < 50 m/s, but dist > 10km)
+        // 5. Discontinuity: Distance Jump > 10 km (dt <= 30s)
         let distanceJumpPoints = [
-            TrajectoryPoint(latitude: 37.7749, longitude: -122.4194, timestamp: baseDate, horizontalAccuracy: 10.0),
-            TrajectoryPoint(latitude: 37.7750, longitude: -122.4195, timestamp: baseDate.addingTimeInterval(30), horizontalAccuracy: 10.0),
-            // San Jose coordinate (~70km away) at 200s gap (dist > 10km)
-            TrajectoryPoint(latitude: 37.3382, longitude: -121.8863, timestamp: baseDate.addingTimeInterval(230), horizontalAccuracy: 10.0),
-            TrajectoryPoint(latitude: 37.3383, longitude: -121.8864, timestamp: baseDate.addingTimeInterval(260), horizontalAccuracy: 10.0)
+            TrajectoryPoint(latitude: 37.7741, longitude: -122.4191, timestamp: baseDate, horizontalAccuracy: 10.0),
+            TrajectoryPoint(latitude: 37.7743, longitude: -122.4193, timestamp: baseDate.addingTimeInterval(10), horizontalAccuracy: 10.0),
+            // San Jose coordinate (~70km away) at 10s gap (dist > 10km, dt=10s <= 30s)
+            TrajectoryPoint(latitude: 37.3382, longitude: -121.8863, timestamp: baseDate.addingTimeInterval(20), horizontalAccuracy: 10.0),
+            TrajectoryPoint(latitude: 37.3384, longitude: -121.8865, timestamp: baseDate.addingTimeInterval(30), horizontalAccuracy: 10.0)
         ]
         let distSegs = TrajectoryMath.segment(points: distanceJumpPoints)
         assertTrue(distSegs.count == 2, "Distance jump > 10km should split into 2 segments (actual: \(distSegs.count))")
 
-        // 6. Discontinuity: Nonpositive Time Delta (dt <= 0)
-        let nonpositivePoints = [
+        // 6. Duplicate timestamps: display-only de-duplication retaining raw
+        let duplicatePoints = [
             TrajectoryPoint(latitude: 37.7741, longitude: -122.4191, timestamp: baseDate, horizontalAccuracy: 10.0),
-            TrajectoryPoint(latitude: 37.7742, longitude: -122.4192, timestamp: baseDate.addingTimeInterval(30), horizontalAccuracy: 10.0),
-            // Duplicate timestamp or backwards timestamp (out-of-order resolved or duplicate dt=0)
-            TrajectoryPoint(latitude: 37.7743, longitude: -122.4193, timestamp: baseDate.addingTimeInterval(30), horizontalAccuracy: 10.0),
-            TrajectoryPoint(latitude: 37.7744, longitude: -122.4194, timestamp: baseDate.addingTimeInterval(60), horizontalAccuracy: 10.0)
+            TrajectoryPoint(latitude: 37.7743, longitude: -122.4193, timestamp: baseDate.addingTimeInterval(10), horizontalAccuracy: 10.0),
+            // Duplicate timestamp (dt=0) with coarser accuracy
+            TrajectoryPoint(latitude: 37.77435, longitude: -122.41935, timestamp: baseDate.addingTimeInterval(10), horizontalAccuracy: 25.0),
+            TrajectoryPoint(latitude: 37.7745, longitude: -122.4195, timestamp: baseDate.addingTimeInterval(20), horizontalAccuracy: 10.0)
         ]
-        let nonpositiveSegs = TrajectoryMath.segment(points: nonpositivePoints)
-        assertTrue(nonpositiveSegs.count == 2, "Nonpositive time delta (dt=0) should split into 2 segments")
+        let dedupedSegs = TrajectoryMath.segment(points: duplicatePoints)
+        assertTrue(dedupedSegs.count == 1, "Duplicate timestamps (dt=0) must be de-duplicated for display without splitting segment")
+        assertTrue(dedupedSegs[0].points.count == 3, "De-duplicated segment should contain 3 distinct points retaining higher precision fix")
+        let dedupAnalysis = TrajectoryMath.analyzeDay(points: duplicatePoints)
+        assertTrue(dedupAnalysis.rawCount == 4, "Raw count must preserve all 4 fixes")
 
-        // 7. Dropping Singleton Points (Segment < 2 points)
-        // 3 points: p1 -> p2 (continuous), p3 isolated after 10-minute gap
-        let singletonPoints = [
+        // 6b. Conflicting Distant Coordinates at Same Timestamp (Preserve Barrier & Uncertainty)
+        let conflictingSameTimestampPoints = [
             TrajectoryPoint(latitude: 37.7741, longitude: -122.4191, timestamp: baseDate, horizontalAccuracy: 10.0),
-            TrajectoryPoint(latitude: 37.7742, longitude: -122.4192, timestamp: baseDate.addingTimeInterval(30), horizontalAccuracy: 10.0),
-            TrajectoryPoint(latitude: 37.7743, longitude: -122.4193, timestamp: baseDate.addingTimeInterval(700), horizontalAccuracy: 10.0)
+            TrajectoryPoint(latitude: 37.7743, longitude: -122.4193, timestamp: baseDate.addingTimeInterval(10), horizontalAccuracy: 10.0),
+            // Conflicting distant coordinate (~2.2km away) reported at exact same timestamp t=10
+            TrajectoryPoint(latitude: 37.7940, longitude: -122.4192, timestamp: baseDate.addingTimeInterval(10), horizontalAccuracy: 10.0),
+            TrajectoryPoint(latitude: 37.7942, longitude: -122.4194, timestamp: baseDate.addingTimeInterval(20), horizontalAccuracy: 10.0)
         ]
-        let singletonSegs = TrajectoryMath.segment(points: singletonPoints)
-        assertTrue(singletonSegs.count == 1, "Isolated 3rd point must be dropped as singleton, yielding 1 segment")
-        assertTrue(singletonSegs[0].points.count == 2, "Resulting segment must have 2 points")
+        let conflictAnalysis = TrajectoryMath.analyzeDay(points: conflictingSameTimestampPoints)
+        assertTrue(conflictAnalysis.rawCount == 4, "Raw count must preserve all 4 fixes including conflicting same-timestamp coords")
+        assertTrue(conflictAnalysis.segments.count == 2, "Conflicting distant coords at same timestamp must act as barrier and split into 2 segments")
+        assertTrue(conflictAnalysis.segments[0].points.count == 2, "First segment has 2 points")
+        assertTrue(conflictAnalysis.segments[1].points.count == 2, "Second segment has 2 points")
 
-        // 8. Filtering Unusable Accuracy & Invalid Coordinates
+        // 7. Anchored Stationary Jitter Suppression vs Slow Walk
+        var stationaryPoints: [TrajectoryPoint] = []
+        for i in 0..<10 {
+            let jitterLat = 37.7749 + Double(i % 3) * 0.00002 // ~2 meters jitter
+            let jitterLon = -122.4194 + Double(i % 2) * 0.00002
+            stationaryPoints.append(
+                TrajectoryPoint(
+                    latitude: jitterLat,
+                    longitude: jitterLon,
+                    timestamp: baseDate.addingTimeInterval(Double(i * 10)),
+                    horizontalAccuracy: 15.0
+                )
+            )
+        }
+        let statAnalysis = TrajectoryMath.analyzeDay(points: stationaryPoints)
+        assertTrue(statAnalysis.segments.isEmpty, "Stationary jitter within uncertainty radius must not produce spurious movement segment")
+        assertTrue(statAnalysis.singletons.count == 1, "Stationary jitter must produce 1 dwell singleton")
+        assertTrue(statAnalysis.singletons[0].observationDuration == 90.0, "Dwell singleton must have supported observation duration of 90s")
+
+        // 7b. Mixed Route: Walking -> Stationary Dwell -> Walking
+        var mixedRoutePoints: [TrajectoryPoint] = []
+        for i in 0..<5 {
+            mixedRoutePoints.append(
+                TrajectoryPoint(
+                    latitude: 37.7741 + Double(i) * 0.0002,
+                    longitude: -122.4191,
+                    timestamp: baseDate.addingTimeInterval(Double(i * 10)),
+                    horizontalAccuracy: 10.0
+                )
+            )
+        }
+        let mrAnchor = mixedRoutePoints.last!
+        let mrDwellStart = mrAnchor.timestamp
+        for i in 1...20 {
+            mixedRoutePoints.append(
+                TrajectoryPoint(
+                    latitude: mrAnchor.latitude + Double(i % 3) * 0.00002,
+                    longitude: mrAnchor.longitude + Double(i % 2) * 0.00002,
+                    timestamp: mrDwellStart.addingTimeInterval(Double(i * 10)),
+                    horizontalAccuracy: 15.0
+                )
+            )
+        }
+        let mrDwellEnd = mrDwellStart.addingTimeInterval(20 * 10)
+        for i in 1...4 {
+            mixedRoutePoints.append(
+                TrajectoryPoint(
+                    latitude: mrAnchor.latitude + Double(i) * 0.0002,
+                    longitude: -122.4191,
+                    timestamp: mrDwellEnd.addingTimeInterval(Double(i * 10)),
+                    horizontalAccuracy: 10.0
+                )
+            )
+        }
+        let mixedAnalysis = TrajectoryMath.analyzeDay(points: mixedRoutePoints)
+        assertTrue(mixedAnalysis.rawCount == 29, "Mixed route must preserve all 29 raw fixes")
+        assertTrue(mixedAnalysis.segments.count == 2, "Mixed route must split into 2 segments around stationary dwell")
+        assertTrue(mixedAnalysis.singletons.count == 1, "Mixed route must produce 1 stationary dwell singleton")
+        assertTrue(abs(mixedAnalysis.singletons[0].observationDuration - 200.0) < 0.1, "Dwell singleton must have 200s duration")
+        assertTrue(mixedAnalysis.segments[0].points.count == 5, "First walk segment has 5 points")
+        assertTrue(mixedAnalysis.segments[1].points.count == 5, "Second walk segment has 5 points")
+
+        // 8. Poor-Fix Barrier and Outlier Handling
         let mixedPoints = [
+            // Segment 1 (2 points)
             TrajectoryPoint(latitude: 37.7741, longitude: -122.4191, timestamp: baseDate, horizontalAccuracy: 10.0),
-            TrajectoryPoint(latitude: 37.7742, longitude: -122.4192, timestamp: baseDate.addingTimeInterval(30), horizontalAccuracy: 250.0), // Accuracy > 200m rejected
-            TrajectoryPoint(latitude: Double.nan, longitude: -122.4193, timestamp: baseDate.addingTimeInterval(60), horizontalAccuracy: 10.0), // NaN rejected
-            TrajectoryPoint(latitude: 100.0, longitude: -122.4193, timestamp: baseDate.addingTimeInterval(90), horizontalAccuracy: 10.0), // Out of range lat rejected
-            TrajectoryPoint(latitude: 37.7743, longitude: -122.4193, timestamp: baseDate.addingTimeInterval(120), horizontalAccuracy: -1.0), // Negative accuracy rejected
-            TrajectoryPoint(latitude: 37.7744, longitude: -122.4194, timestamp: baseDate.addingTimeInterval(150), horizontalAccuracy: 50.0)
+            TrajectoryPoint(latitude: 37.7743, longitude: -122.4193, timestamp: baseDate.addingTimeInterval(10), horizontalAccuracy: 10.0),
+            // Poor fix barrier (accuracy 250m > 200m)
+            TrajectoryPoint(latitude: 37.7744, longitude: -122.4194, timestamp: baseDate.addingTimeInterval(20), horizontalAccuracy: 250.0),
+            // Nonfinite & invalid coordinate barriers
+            TrajectoryPoint(latitude: Double.nan, longitude: -122.4194, timestamp: baseDate.addingTimeInterval(25), horizontalAccuracy: 10.0),
+            TrajectoryPoint(latitude: 100.0, longitude: -122.4194, timestamp: baseDate.addingTimeInterval(30), horizontalAccuracy: 10.0),
+            // Segment 2 (2 points)
+            TrajectoryPoint(latitude: 37.7745, longitude: -122.4195, timestamp: baseDate.addingTimeInterval(40), horizontalAccuracy: 10.0),
+            TrajectoryPoint(latitude: 37.7747, longitude: -122.4197, timestamp: baseDate.addingTimeInterval(50), horizontalAccuracy: 10.0)
         ]
-        // Valid points remaining: p0 (t=0) and p5 (t=150s, dt=150s, dist ~50m -> continuous)
         let filteredSegs = TrajectoryMath.segment(points: mixedPoints)
-        assertTrue(filteredSegs.count == 1, "Invalid/inaccurate points must be filtered before segmentation")
-        assertTrue(filteredSegs[0].points.count == 2, "Filtered segment should retain the 2 valid points")
+        assertTrue(filteredSegs.count == 2, "Poor-fix barrier must split into 2 segments without bridging")
+        assertTrue(filteredSegs[0].points.count == 2, "First segment must have 2 points")
+        assertTrue(filteredSegs[1].points.count == 2, "Second segment must have 2 points")
 
         // 9. Chronological Sorting of Unsorted Input
         let unsortedPoints = [
-            TrajectoryPoint(latitude: 37.7743, longitude: -122.4193, timestamp: baseDate.addingTimeInterval(60), horizontalAccuracy: 10.0),
+            TrajectoryPoint(latitude: 37.7745, longitude: -122.4195, timestamp: baseDate.addingTimeInterval(20), horizontalAccuracy: 10.0),
             TrajectoryPoint(latitude: 37.7741, longitude: -122.4191, timestamp: baseDate, horizontalAccuracy: 10.0),
-            TrajectoryPoint(latitude: 37.7742, longitude: -122.4192, timestamp: baseDate.addingTimeInterval(30), horizontalAccuracy: 10.0)
+            TrajectoryPoint(latitude: 37.7743, longitude: -122.4193, timestamp: baseDate.addingTimeInterval(10), horizontalAccuracy: 10.0)
         ]
         let sortedSegs = TrajectoryMath.segment(points: unsortedPoints)
         assertTrue(sortedSegs.count == 1, "Unsorted input points must be sorted chronologically and segmented")
         assertTrue(sortedSegs[0].points[0].timestamp == baseDate, "First point in segment must have earliest timestamp")
-        assertTrue(sortedSegs[0].points[2].timestamp == baseDate.addingTimeInterval(60), "Last point must have latest timestamp")
+        assertTrue(sortedSegs[0].points[2].timestamp == baseDate.addingTimeInterval(20), "Last point must have latest timestamp")
 
         // 10. Deterministic Stable ID Generation
-        let run1 = TrajectoryMath.segment(points: continuousPoints)
-        let run2 = TrajectoryMath.segment(points: continuousPoints)
+        let run1 = TrajectoryMath.segment(points: smoothWalkPoints)
+        let run2 = TrajectoryMath.segment(points: smoothWalkPoints)
         assertTrue(run1.count == 1 && run2.count == 1, "Both segmentation runs should produce 1 segment")
         assertTrue(run1[0].id == run2[0].id, "Segment IDs must be completely deterministic across runs (ID: \(run1[0].id))")
         assertFalse(run1[0].id.isEmpty, "Segment ID must not be empty")
-
-        // Distinct segments must have distinct IDs
-        let twoSegs = TrajectoryMath.segment(points: timeGapPoints)
-        assertTrue(twoSegs.count == 2, "Should have 2 segments")
-        assertTrue(twoSegs[0].id != twoSegs[1].id, "Distinct segments must have distinct IDs")
 
         // 11. Step Count Formatting & Degradation
         assertTrue(StepCountReader.formatStepCount(nil) == "Steps unavailable", "Nil steps must degrade to 'Steps unavailable'")

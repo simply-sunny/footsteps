@@ -33,7 +33,7 @@ struct FootstepsApp: App {
             )
 
             let storeURL = storeDirectory.appendingPathComponent("default.store")
-            let schema = Schema([LocationPoint.self])
+            let schema = Schema(versionedSchema: LocationSchemaV2.self)
             let config = ModelConfiguration(
                 "FootstepsStore",
                 schema: schema,
@@ -41,7 +41,11 @@ struct FootstepsApp: App {
                 allowsSave: true,
                 cloudKitDatabase: .none
             )
-            let modelContainer = try ModelContainer(for: schema, configurations: [config])
+            let modelContainer = try ModelContainer(
+                for: schema,
+                migrationPlan: LocationMigrationPlan.self,
+                configurations: [config]
+            )
 
             Self.applyFileProtection(to: storeDirectory)
 

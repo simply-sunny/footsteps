@@ -2,6 +2,7 @@ import Foundation
 import CoreLocation
 import SwiftData
 import Combine
+import UIKit
 
 @MainActor
 final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
@@ -11,8 +12,12 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
     @Published var authorizationStatus: CLAuthorizationStatus = .notDetermined
     @Published var lastError: String? = nil
     @Published private(set) var isTrackingActive: Bool = false
+    @Published var locationUnknownCount: Int = 0
+    @Published var lastLocationUnknownDate: Date? = nil
 
-    private let locationManager: CLLocationManager
+    let sessionID: String = UUID().uuidString
+    let coreLocationManager: CLLocationManager
+
     private var modelContainer: ModelContainer?
     private var isConfigured = false
 
@@ -23,11 +28,18 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
         return UserDefaults.standard.bool(forKey: Self.trackingEnabledKey)
     }
 
+    var isReducedAccuracy: Bool {
+        if #available(iOS 14.0, *) {
+            return coreLocationManager.accuracyAuthorization == .reducedAccuracy
+        }
+        return false
+    }
+
     override init() {
-        self.locationManager = CLLocationManager()
+        self.coreLocationManager = CLLocationManager()
         super.init()
-        self.locationManager.delegate = self
-        self.authorizationStatus = locationManager.authorizationStatus
+        self.coreLocationManager.delegate = self
+        self.authorizationStatus = coreLocationManager.authorizationStatus
     }
 
     static func shouldStartTracking(
@@ -61,14 +73,35 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
         self.lastError = message
     }
 
+    func refreshAuthorizationStatus() {
+        self.authorizationStatus = coreLocationManager.authorizationStatus
+        if isTrackingEnabled && Self.shouldStartTracking(
+            isEnabled: true,
+            authorizationStatus: authorizationStatus,
+            isAlreadyTracking: isTrackingActive
+        ) {
+            startTracking()
+        }
+    }
+
     func requestPermissions() {
-        switch locationManager.authorizationStatus {
+        switch coreLocationManager.authorizationStatus {
         case .notDetermined:
-            locationManager.requestWhenInUseAuthorization()
+            coreLocationManager.requestWhenInUseAuthorization()
         case .authorizedWhenInUse:
-            locationManager.requestAlwaysAuthorization()
+            coreLocationManager.requestAlwaysAuthorization()
+        case .authorizedAlways:
+            requestFullAccuracy()
         default:
             break
+        }
+    }
+
+    func requestFullAccuracy() {
+        if #available(iOS 14.0, *) {
+            if coreLocationManager.accuracyAuthorization == .reducedAccuracy {
+                coreLocationManager.requestTemporaryFullAccuracyAuthorization(withPurposeKey: "FullAccuracy")
+            }
         }
     }
 
@@ -89,15 +122,16 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
         ) else { return }
 
         isTrackingActive = true
-        locationManager.desiredAccuracy = kCLLocationAccuracyHundredMeters
-        locationManager.distanceFilter = 50.0
-        locationManager.activityType = .other
-        locationManager.allowsBackgroundLocationUpdates = true
-        locationManager.pausesLocationUpdatesAutomatically = false
-        locationManager.startUpdatingLocation()
+        coreLocationManager.desiredAccuracy = kCLLocationAccuracyBestForNavigation
+        coreLocationManager.distanceFilter = kCLDistanceFilterNone
+        coreLocationManager.activityType = .fitness
+        coreLocationManager.allowsBackgroundLocationUpdates = true
+        coreLocationManager.showsBackgroundLocationIndicator = true
+        coreLocationManager.pausesLocationUpdatesAutomatically = false
+        coreLocationManager.startUpdatingLocation()
 
         if CLLocationManager.significantLocationChangeMonitoringAvailable() {
-            locationManager.startMonitoringSignificantLocationChanges()
+            coreLocationManager.startMonitoringSignificantLocationChanges()
         }
     }
 
@@ -105,32 +139,52 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
         guard isTrackingActive else { return }
         isTrackingActive = false
 
-        locationManager.stopUpdatingLocation()
+        coreLocationManager.stopUpdatingLocation()
         if CLLocationManager.significantLocationChangeMonitoringAvailable() {
-            locationManager.stopMonitoringSignificantLocationChanges()
+            coreLocationManager.stopMonitoringSignificantLocationChanges()
         }
     }
 
     nonisolated func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        let validLocations = locations.filter { loc in
-            TrajectoryMath.isValid(
-                latitude: loc.coordinate.latitude,
-                longitude: loc.coordinate.longitude,
-                horizontalAccuracy: loc.horizontalAccuracy
-            )
-        }
-        guard !validLocations.isEmpty else { return }
+        guard !locations.isEmpty else { return }
 
         Task { @MainActor in
             guard self.isTrackingEnabled else { return }
             guard let container = self.modelContainer else { return }
             let context = ModelContext(container)
-            for loc in validLocations {
+            let isBg = UIApplication.shared.applicationState != .active
+            let now = Date()
+
+            for loc in locations {
+                let isSimulated: Bool?
+                let isProducedByAccessory: Bool?
+                if #available(iOS 15.0, *) {
+                    isSimulated = loc.sourceInformation?.isSimulatedBySoftware
+                    isProducedByAccessory = loc.sourceInformation?.isProducedByAccessory
+                } else {
+                    isSimulated = nil
+                    isProducedByAccessory = nil
+                }
+
+                // Preserve raw reported measurements directly from CoreLocation (including negative sentinels)
                 let point = LocationPoint(
                     latitude: loc.coordinate.latitude,
                     longitude: loc.coordinate.longitude,
                     timestamp: loc.timestamp,
-                    horizontalAccuracy: loc.horizontalAccuracy
+                    horizontalAccuracy: loc.horizontalAccuracy,
+                    altitude: loc.altitude,
+                    verticalAccuracy: loc.verticalAccuracy,
+                    speed: loc.speed,
+                    speedAccuracy: loc.speedAccuracy,
+                    course: loc.course,
+                    courseAccuracy: loc.courseAccuracy,
+                    floor: loc.floor?.level,
+                    sourceProvider: "CoreLocation",
+                    isSimulatedBySoftware: isSimulated,
+                    isProducedByAccessory: isProducedByAccessory,
+                    receivedTimestamp: now,
+                    sessionID: self.sessionID,
+                    isBackground: isBg
                 )
                 context.insert(point)
             }
@@ -164,7 +218,11 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
         if let clError = error as? CLError {
             switch clError.code {
             case .locationUnknown:
-                // Transient location error: CoreLocation will continue acquiring coordinates.
+                // Transient location error: CoreLocation was temporarily unable to obtain a location fix.
+                Task { @MainActor in
+                    self.locationUnknownCount += 1
+                    self.lastLocationUnknownDate = Date()
+                }
                 return
             case .denied:
                 Task { @MainActor in

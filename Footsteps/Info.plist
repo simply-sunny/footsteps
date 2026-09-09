@@ -26,6 +26,11 @@
 	<string>Footsteps passively tracks your location in the background to build your daily movement history.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Footsteps records your daily movements to display your daily trajectory history.</string>
+	<key>NSLocationTemporaryUsageDescriptionDictionary</key>
+	<dict>
+		<key>FullAccuracy</key>
+		<string>Footsteps needs full accuracy to record high-fidelity trajectories.</string>
+	</dict>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>
