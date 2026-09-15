@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="Footsteps/Assets.xcassets/AppIcon.appiconset/AppIcon-Dark.png">
-    <img src="Footsteps/Assets.xcassets/AppIcon.appiconset/AppIcon-Default.png" width="128" height="128" alt="Footsteps logo" />
+    <img src="Footsteps/Assets.xcassets/AppIcon.appiconset/AppIcon-Default.png" width="128" height="128" alt="Footsteps logo" style="border-radius: 28px;" />
   </picture>
 </p>
 
@@ -22,8 +22,9 @@ A minimal, local-first iOS 17+ app that passively records device location with m
   4. **TIME BY PLACE**: Top-5 places horizontal bar chart ranked by dwell duration.
   5. **DAY BREAKDOWN**: Non-overlapping stationary, moving, and unknown elapsed-time donut breakdown chart.
 - **Mathematical Day Partition (`DayHistory.swift`)**: Pure Foundation mathematical partition of calendar day elapsed time into mutually disjoint moving, stationary, and unknown sets ($T_{\text{moving}} + T_{\text{stationary}} + T_{\text{unknown}} = T_{\text{elapsed}}$), accounting for calendar DST (23h spring, 25h fall) and clamping today's elapsed time to current time.
-- **Conservative Anchored Place Clustering**: Deterministic grouping of nearby stationary stays ($\le 65\text{m}$) into stable place identities without network geocoding or fabricated venue names.
-- **Tap Details**: Tapping stays displays neutral cards with observed arrival/departure bounds and duration; single observations display without inferred duration.
+- **Conservative Anchored Place Clustering & Grouped Path Overlays**: Deterministic grouping of nearby stationary stays ($\le 65\text{m}$) into stable place identities without network geocoding or fabricated venue names. In Path mode, renders a single duration-weighted place marker per `DayPlace` (eliminating redundant overlapping stay rings) while preserving truthful individual visit arrival/departure lists and durations on tap without fabricating visits across unobserved gaps.
+- **Bounded Stationary Dwell Radius ($\le 25\text{m}$)**: Dwell grouping bounds the spatial uncertainty radius to $25\text{m}$ (`defaultMaxDwellRadius`). Coarse initial fixes ($100\text{m}$–$200\text{m}$ accuracy) reflect spatial uncertainty rather than evidence of a massive stationary radius, preventing coarse fixes from swallowing subsequent continuous walking bouts.
+- **Tap Details**: Tapping places displays neutral cards with observed visit counts, total supported dwell time, and detailed individual visit timestamps; single observations display without inferred duration.
 - **Dedicated Settings & Developer Diagnostics**: User settings cleanly separated from engineering diagnostics. Raw fix metrics, sensor telemetry, and debug overlays are sequestered under Developer Diagnostics.
 - **Maximum-Fidelity Passive Tracking**: Zero-loss raw evidence ingestion configured with `kCLLocationAccuracyBestForNavigation`, zero distance filter, fitness activity type, background indicator, and temporary full accuracy request.
 - **Strict Evidence vs. Inference Storage**: Persistent raw location point history stored locally on-device using versioned SwiftData schemas (`LocationSchemaV1`, `LocationSchemaV2`, `LocationMigrationPlan`) with encrypted file protection (`completeUntilFirstUserAuthentication`).
@@ -62,12 +63,12 @@ A minimal, local-first iOS 17+ app that passively records device location with m
 
 ## Verification & Testing
 
-The test suite includes 43 automated unit and integration tests (13 Location & Storage tests, 30 UI & Map tests) and 2 standalone mathematical suites:
+The test suite includes 65 automated unit and integration tests (13 Location & Storage tests, 40 UI & Map tests, 12 Day History tests) and 2 standalone mathematical suites:
 
 ```bash
 # Run Foundation math, segmentation, and navigation test suites via CLI
-swiftc Tests/Task1FoundationTests.swift Footsteps/TrajectoryMath.swift -o /tmp/task1_test && /tmp/task1_test
-swiftc Tests/Task2FoundationTests.swift Footsteps/TrajectoryMath.swift Footsteps/StepCountReader.swift -o /tmp/task2_test && /tmp/task2_test
+DEVELOPER_DIR=/Applications/Xcode-27.0.0-Beta.6.app/Contents/Developer xcrun --sdk macosx swiftc Footsteps/TrajectoryMath.swift Footsteps/DayHistory.swift Tests/Task1FoundationTests.swift -o /tmp/task1 && /tmp/task1
+DEVELOPER_DIR=/Applications/Xcode-27.0.0-Beta.6.app/Contents/Developer xcrun --sdk macosx swiftc Footsteps/TrajectoryMath.swift Footsteps/DayHistory.swift Footsteps/StepCountReader.swift Tests/Task2FoundationTests.swift -o /tmp/task2 && /tmp/task2
 ```
 
 Full app compilation and UI/MapKit test execution require Xcode with the iOS 17+ SDK:
