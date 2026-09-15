@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="Footsteps/Assets.xcassets/AppIcon.appiconset/AppIcon-Dark.png">
-    <img src="Footsteps/Assets.xcassets/AppIcon.appiconset/AppIcon-Default.png" width="128" height="128" alt="Footsteps logo" style="border-radius: 28px;" />
+    <source media="(prefers-color-scheme: dark)" srcset="logo-dark.png">
+    <img src="logo.png" width="128" height="128" alt="Footsteps logo" style="border-radius: 28px;" />
   </picture>
 </p>
 
@@ -72,6 +72,7 @@ DEVELOPER_DIR=/Applications/Xcode-27.0.0-Beta.6.app/Contents/Developer xcrun --s
 ```
 
 Full app compilation and UI/MapKit test execution require Xcode with the iOS 17+ SDK:
+
 - **Schema Migration & Data Preservation**: Verified lightweight migration from V1 to V2 across historical database copies and 5,000-record synthetic benchmark stress tests.
 - **Physical Upgrade Ingestion**: Verified signed Release build installation over prior versions, confirming 141 historical records preserved with full database integrity and post-launch point ingestion across active and non-active application lifecycle states.
 - **Ingestion & Sentinel Preservation**: Verified zero-loss storage, negative sentinel preservation (`-1` speed/course/verticalAccuracy), `sourceInformation` software/accessory flags, session ID tagging, and lifecycle state stamping (`bg`/`fg`/`unk`).
