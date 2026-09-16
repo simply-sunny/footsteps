@@ -1,6 +1,7 @@
 import XCTest
 import SwiftData
 import MapKit
+import HealthKit
 @testable import Footsteps
 
 final class UIAndMapTests: XCTestCase {
@@ -761,6 +762,30 @@ final class UIAndMapTests: XCTestCase {
         )
         XCTAssertFalse(formatted.isEmpty)
         XCTAssertTrue(formatted.contains("9:15") && formatted.contains("10:00"))
+    }
+
+    func testStepSampleOwnershipAcrossDSTAndToday() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "America/New_York")!
+        let type = HKQuantityType.quantityType(forIdentifier: .stepCount)!
+        for (month, day, hours) in [(3, 8, 23), (11, 1, 25)] {
+            let date = calendar.date(from: DateComponents(year: 2026, month: month, day: day, hour: 12))!
+            let interval = TrajectoryMath.dayInterval(for: date, calendar: calendar)
+            XCTAssertEqual(interval.duration, Double(hours * 3600))
+            let next = TrajectoryMath.dayInterval(for: interval.end, calendar: calendar)
+            let predicate = StepCountReader.makeSamplePredicate(startDate: interval.start, endDate: interval.end)
+            let nextPredicate = StepCountReader.makeSamplePredicate(startDate: next.start, endDate: next.end)
+            for offset in [-1.0, 0, interval.duration - 1, interval.duration] {
+                let start = interval.start.addingTimeInterval(offset)
+                let sample = HKQuantitySample(type: type, quantity: HKQuantity(unit: .count(), doubleValue: 10), start: start, end: start.addingTimeInterval(60))
+                XCTAssertEqual(predicate.evaluate(with: sample), offset >= 0 && offset < interval.duration)
+                XCTAssertFalse(predicate.evaluate(with: sample) && nextPredicate.evaluate(with: sample), "No boundary sample may belong to both days")
+            }
+            let history = DayHistory.build(points: [], selectedDate: date, now: date, calendar: calendar)
+            let today = StepCountReader.makeSamplePredicate(startDate: interval.start, endDate: interval.start.addingTimeInterval(history.totalElapsedDuration))
+            let future = HKQuantitySample(type: type, quantity: HKQuantity(unit: .count(), doubleValue: 10), start: date, end: date.addingTimeInterval(60))
+            XCTAssertFalse(today.evaluate(with: future), "Today's query excludes samples starting at or after now")
+        }
     }
 
     func testSamplePredicateConstruction() {

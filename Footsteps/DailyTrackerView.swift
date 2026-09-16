@@ -538,6 +538,9 @@ public struct StayDetailCardView: View {
 /// Clean card displaying details for a tapped moving trajectory segment.
 public struct SegmentDetailCardView: View {
     public let segment: TrajectorySegment
+    @State private var steps: Int?
+    @State private var isLoadingSteps = false
+    @State private var didLoadSteps = false
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -655,6 +658,15 @@ public struct DebugPointDetailCardView: View {
                         .foregroundColor(.secondary)
                 }
             }
+            Button(isLoadingSteps ? "Reading steps…" : didLoadSteps ? StepCountReader.formatStepCount(steps) : "Read steps from Health") {
+                isLoadingSteps = true
+                Task { @MainActor in
+                    steps = await StepCountReader.shared.fetchStepCount(startDate: segment.startDate, endDate: segment.endDate)
+                    didLoadSteps = true
+                    isLoadingSteps = false
+                }
+            }
+            .disabled(isLoadingSteps)
         }
         .padding(.horizontal, 20)
         .padding(.top, 16)

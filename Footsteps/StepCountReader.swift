@@ -10,7 +10,7 @@ public final class StepCountReader: @unchecked Sendable {
         self.healthStore = healthStore
     }
 
-    /// Fetches the cumulative step count for the exact date interval [startDate, endDate].
+    /// Fetches cumulative steps for samples starting in [startDate, endDate).
     /// Returns the step count as an Int, or nil if unavailable, unauthorized, or unsupported.
     public func fetchStepCount(startDate: Date, endDate: Date) async -> Int? {
         guard startDate < endDate else { return nil }
@@ -40,9 +40,12 @@ public final class StepCountReader: @unchecked Sendable {
 
     // MARK: - Predicate & Query Construction Helpers
 
-    /// Builds a sample predicate covering [startDate, endDate] with options: [] to allow overlapping boundary samples.
+    /// Assigns each sample to exactly one interval by start time; boundary samples are not prorated.
     public static func makeSamplePredicate(startDate: Date, endDate: Date) -> NSPredicate {
-        HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: [])
+        NSCompoundPredicate(andPredicateWithSubpredicates: [
+            HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: .strictStartDate),
+            NSPredicate(format: "%K < %@", HKPredicateKeyPathStartDate, endDate as NSDate)
+        ])
     }
 
     // MARK: - Formatting Helpers

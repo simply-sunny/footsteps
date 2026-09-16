@@ -6,6 +6,9 @@ import MapKit
 public struct DayDetailView: View {
     public let history: DayHistory
     @Environment(\.dismiss) private var dismiss
+    @State private var steps: Int?
+    @State private var isLoadingSteps = false
+    @State private var didLoadSteps = false
 
     public init(history: DayHistory) {
         self.history = history
@@ -57,6 +60,18 @@ public struct DayDetailView: View {
                 VStack(alignment: .leading, spacing: 24) {
                     // 1. Headline Row: Observed Distance, Place Count, Moving Duration
                     headlineSection
+                    Button(isLoadingSteps ? "Reading steps…" : didLoadSteps ? StepCountReader.formatStepCount(steps) : "Read day steps from Health") {
+                        isLoadingSteps = true
+                        Task { @MainActor in
+                            steps = await StepCountReader.shared.fetchStepCount(
+                                startDate: history.dayInterval.start,
+                                endDate: history.dayInterval.start.addingTimeInterval(history.totalElapsedDuration)
+                            )
+                            didLoadSteps = true
+                            isLoadingSteps = false
+                        }
+                    }
+                    .disabled(isLoadingSteps || history.totalElapsedDuration == 0)
 
                     Divider()
 
