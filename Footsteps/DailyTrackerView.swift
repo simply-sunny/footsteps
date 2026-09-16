@@ -573,6 +573,15 @@ public struct SegmentDetailCardView: View {
                         .foregroundColor(.secondary)
                 }
             }
+            Button(isLoadingSteps ? "Reading steps…" : didLoadSteps ? StepCountReader.formatStepCount(steps) : "Read steps from Health") {
+                isLoadingSteps = true
+                Task { @MainActor in
+                    steps = await StepCountReader.shared.fetchStepCount(startDate: segment.startDate, endDate: segment.endDate)
+                    didLoadSteps = true
+                    isLoadingSteps = false
+                }
+            }
+            .disabled(isLoadingSteps)
         }
         .padding(.horizontal, 20)
         .padding(.top, 16)
@@ -658,15 +667,6 @@ public struct DebugPointDetailCardView: View {
                         .foregroundColor(.secondary)
                 }
             }
-            Button(isLoadingSteps ? "Reading steps…" : didLoadSteps ? StepCountReader.formatStepCount(steps) : "Read steps from Health") {
-                isLoadingSteps = true
-                Task { @MainActor in
-                    steps = await StepCountReader.shared.fetchStepCount(startDate: segment.startDate, endDate: segment.endDate)
-                    didLoadSteps = true
-                    isLoadingSteps = false
-                }
-            }
-            .disabled(isLoadingSteps)
         }
         .padding(.horizontal, 20)
         .padding(.top, 16)
