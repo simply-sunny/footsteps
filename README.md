@@ -1,97 +1,131 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="logo-dark.png">
-    <img src="logo.png" width="128" height="128" alt="Footsteps logo" style="border-radius: 28px;" />
+    <img src="logo.png" width="128" height="128" alt="Footsteps logo" />
   </picture>
 </p>
 
-# Footsteps
+<h1 align="center">Footsteps</h1>
 
-A minimal, local-first iOS 17+ app that passively records device location with maximum fidelity and renders real daily trajectory segments.
+<p align="center">
+  Raw location → a daily diary. Keep the evidence on your iPhone.
+</p>
 
-## Features
+<p align="center">
+  <a href="https://simply-sunny.github.io/footsteps/"><img src="https://img.shields.io/badge/docs-GitHub_Pages-black?style=flat-square&logo=github" alt="Docs"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-black?style=flat-square" alt="License"></a>
+  <a href="https://developer.apple.com/ios/"><img src="https://img.shields.io/badge/platform-iOS_17+-black?style=flat-square&logo=apple" alt="iOS 17+"></a>
+  <a href="https://swift.org/"><img src="https://img.shields.io/badge/language-Swift-black?style=flat-square&logo=swift" alt="Swift"></a>
+</p>
 
-- **Quiet Full-Bleed Map & Native UI**: Clean, full-bleed MapKit map interface with floating capsule controls for date navigation, recentering, and settings. No raw dots or accuracy jargon in normal view.
-- **Path vs. Time (Heatmap) Modes**:
-  - **Path Mode**: Renders smooth reconstructed trajectory segments and duration-scaled dwell nodes.
-  - **Time Mode**: Renders true time-weighted radial heat gradients (via native `MKOverlayRenderer` / CoreGraphics gradients) scaled strictly by dwell duration ($\sqrt{\text{duration}}$), invariant to raw fix density.
-- **Day Detail Screen (Swift Charts)**: Tapping the top summary bar presents a full-screen day analysis in strict sequence:
-  1. **Headline**: Observed moving distance, visited place count, moving duration.
-  2. **WHERE MY TIME WENT**: Non-interactive dwell mini-map displaying time-weighted heat overlays.
-  3. **MY DAY**: Disjoint cumulative observed-distance line chart broken across all unknown gaps.
-  4. **TIME BY PLACE**: Top-5 places horizontal bar chart ranked by dwell duration.
-  5. **DAY BREAKDOWN**: Non-overlapping stationary, moving, and unknown elapsed-time donut breakdown chart.
-- **Mathematical Day Partition (`DayHistory.swift`)**: Pure Foundation mathematical partition of calendar day elapsed time into mutually disjoint moving, stationary, and unknown sets ($T_{\text{moving}} + T_{\text{stationary}} + T_{\text{unknown}} = T_{\text{elapsed}}$), accounting for calendar DST (23h spring, 25h fall) and clamping today's elapsed time to current time.
-- **Conservative Anchored Place Clustering & Grouped Path Overlays**: Deterministic grouping of nearby stationary stays ($\le 65\text{m}$) into stable place identities without network geocoding or fabricated venue names. In Path mode, renders a single duration-weighted place marker per `DayPlace` (eliminating redundant overlapping stay rings) while preserving truthful individual visit arrival/departure lists and durations on tap without fabricating visits across unobserved gaps.
-- **Bounded Stationary Dwell Radius ($\le 25\text{m}$)**: Dwell grouping bounds the spatial uncertainty radius to $25\text{m}$ (`defaultMaxDwellRadius`). Coarse initial fixes ($100\text{m}$–$200\text{m}$ accuracy) reflect spatial uncertainty rather than evidence of a massive stationary radius, preventing coarse fixes from swallowing subsequent continuous walking bouts.
-- **Tap Details**: Tapping places displays neutral cards with observed visit counts, total supported dwell time, and detailed individual visit timestamps; single observations display without inferred duration.
-- **Dedicated Settings & Developer Diagnostics**: User settings cleanly separated from engineering diagnostics. Raw fix metrics, sensor telemetry, and debug overlays are sequestered under Developer Diagnostics.
-- **Maximum-Fidelity Passive Tracking**: Zero-loss raw evidence ingestion configured with `kCLLocationAccuracyBestForNavigation`, zero distance filter, fitness activity type, background indicator, and temporary full accuracy request.
-- **Strict Evidence vs. Inference Storage**: Persistent raw location point history stored locally on-device using versioned SwiftData schemas (`LocationSchemaV1`, `LocationSchemaV2`, `LocationMigrationPlan`) with encrypted file protection (`completeUntilFirstUserAuthentication`).
-- **Raw Sentinel & Metadata Preservation**: Captures raw altitude, speed, course, vertical/speed/course accuracies (preserving native negative sentinels such as `-1` without silent nil conversion), floor level, CoreLocation `sourceInformation` flags (`isSimulatedBySoftware`, `isProducedByAccessory`), tracking session ID, lifecycle state (foreground/background/unknown), and reception timestamps without discarding coarse fixes at ingestion.
-- **Stable Map Viewport & Native Controls**: Date-keyed viewport framing preserves user pan/zoom across live incremental point arrivals. Native recenter and date scrubbing controls.
-- **Zero Third-Party Dependencies**: Pure Apple system frameworks (`SwiftUI`, `SwiftData`, `MapKit`, `Charts`, `CoreLocation`, `HealthKit`, `UIKit`).
-- **Native iOS 18 Dark Appearance Icon**: Configured asset catalog supporting both default and native iOS 18 dark appearance icon styles.
+<p align="center">
+  <sub>SwiftUI · SwiftData · MapKit · Swift Charts · local-first</sub>
+</p>
 
-## Requirements
+---
 
-- iOS 17.0+
-- Xcode 15+ / Xcode 16+ / Xcode 27 beta (Swift 5.0 mode on Swift 6 toolchain)
-- Physical iPhone with Developer Mode enabled (for unattended on-device tracking)
-- Apple Developer account (free personal team or paid developer membership)
+### Highlights
 
-## Install
+| On-device | Path + Time | 23 / 24 / 25 h |
+| :---: | :---: | :---: |
+| local history · no app account or cloud sync | observed movement + duration-weighted stays | calendar-day partition, including daylight-saving changes |
 
-1. Clone the repository to your local machine.
-2. Open `Footsteps.xcodeproj` in Xcode.
-3. Under **Footsteps Target > Signing & Capabilities**, select your **Personal Team** and ensure automatic signing is enabled.
-4. Set a unique **Bundle Identifier** (e.g. `com.<your-name>.Footsteps`).
-5. On your physical iPhone, enable Developer Mode via **Settings > Privacy & Security > Developer Mode** and reboot when prompted.
-6. Connect your iPhone via USB/Wi-Fi, select it as the run destination, and press **Run** (`Cmd + R`).
+Footsteps records raw Core Location observations and reconstructs your day without turning missing data into invented travel. No third-party app dependencies. MapKit may use Apple network services; local-first does not mean every system framework is offline.
 
-## Controls
+### Evidence before inference
 
-- **Day Navigation**: Tap `<` or `>` in the navigation bar or use the interactive DatePicker to navigate between calendar days (future day navigation is disabled).
-- **Segment Inspection**: Tap any trajectory line on the map to select it and view a bottom sheet with start–end time, duration, and on-demand HealthKit step count.
-- **Singleton & Dwell Inspection**: Tap isolated points or dwell clusters on the map to view coordinate details, observation duration, and horizontal accuracy circles.
-- **Diagnostics Map View**: Enable "Show Diagnostics Map Overlay" in Settings to inspect every raw point, accuracy radius, time delta, and status classification.
-- **Diagnostics & Settings**: Tap the gear icon in the navigation bar to open the live telemetry diagnostics sheet.
-- **Date Status**: Header displays date selection, error notices, and permission/precision recovery banners.
-- **Trajectory View**: Pan and pinch to zoom over the MapKit canvas; tap individual trajectory segments, singletons, or raw points to highlight them.
-- **User Tracking**: Tap the native tracking button to toggle location tracking modes.
-- **Location Permission Banner**: Tap the warning banner if location permissions or precision are restricted to open iOS Settings or request full accuracy.
-
-## Verification & Testing
-
-The test suite includes 65 automated unit and integration tests (13 Location & Storage tests, 40 UI & Map tests, 12 Day History tests) and 2 standalone mathematical suites:
-
-```bash
-# Run Foundation math, segmentation, and navigation test suites via CLI
-DEVELOPER_DIR=/Applications/Xcode-27.0.0-Beta.6.app/Contents/Developer xcrun --sdk macosx swiftc Footsteps/TrajectoryMath.swift Footsteps/DayHistory.swift Tests/Task1FoundationTests.swift -o /tmp/task1 && /tmp/task1
-DEVELOPER_DIR=/Applications/Xcode-27.0.0-Beta.6.app/Contents/Developer xcrun --sdk macosx swiftc Footsteps/TrajectoryMath.swift Footsteps/DayHistory.swift Footsteps/StepCountReader.swift Tests/Task2FoundationTests.swift -o /tmp/task2 && /tmp/task2
+```text
+Core Location → protected SwiftData store → daily reconstruction → Path / Time
 ```
 
-Full app compilation and UI/MapKit test execution require Xcode with the iOS 17+ SDK:
+- **Raw evidence:** coordinates, timestamps, accuracy, altitude, speed, course, sensor-source flags and reception metadata. Native negative sentinels are preserved.
+- **Path:** reconstructed movement and stationary observations. Gaps over the provisional 30-second continuity ceiling, poor fixes and implausible jumps split routes.
+- **Time:** radial heat weighted by supported stay duration, not GPS sample count.
+- **Day Detail:** observed distance, places, moving time, dwell map, cumulative distance, time by place and the moving / stationary / unknown breakdown.
+- **Optional Health:** read steps on demand in segment and day details. Samples belong to the interval where they start; boundary samples are not prorated.
 
-- **Schema Migration & Data Preservation**: Verified lightweight migration from V1 to V2 across historical database copies and 5,000-record synthetic benchmark stress tests.
-- **Physical Upgrade Ingestion**: Verified signed Release build installation over prior versions, confirming 141 historical records preserved with full database integrity and post-launch point ingestion across active and non-active application lifecycle states.
-- **Ingestion & Sentinel Preservation**: Verified zero-loss storage, negative sentinel preservation (`-1` speed/course/verticalAccuracy), `sourceInformation` software/accessory flags, session ID tagging, and lifecycle state stamping (`bg`/`fg`/`unk`).
-- **Stationary Grouping & Segmentation**: Verified anchored stationary dwell grouping with continuous observation duration, slow cumulative walk preservation, duplicate timestamp display de-duplication, barrier splitting at >200m, speed jump handling at >50m/s, and singleton isolation.
-- **UI, Precision & Viewport**: Verified precise authorization recovery, diagnostics overlay rendering, stable map framing across live updates, and instant date transitions.
+Moving + stationary + unknown = elapsed time. Today is clamped to elapsed time; unknown intervals remain unknown. See [architecture](ARCHITECTURE.md) for the reconstruction rules and their limits.
 
-## Limitations
+---
 
-- **Source-Only Release**: Provided as an uncompiled source project intended for personal self-signed deployment; no prebuilt binaries or App Store distribution.
-- **Conservative Continuity Policy**: Trajectory reconstruction uses an explicit provisional continuity ceiling ($\le 30\text{s}$) by default. High-rate walking (~1Hz) remains continuous, while blind gaps $> 30\text{s}$ are preserved as separate uncertain observations (singletons, dwells, or split segments) rather than fabricating speculative straight-line chords across unobserved space.
-- **Unavoidable Between-Fix Interpolation**: The $\le 30\text{s}$ continuity threshold is a display and reconstruction heuristic rather than a continuous location ground truth. Straight-line visual connection between consecutive fixes within the sampling window remains an unavoidable discrete interpolation.
-- **Stationary Dwell Heuristics**: Dwell grouping applies provisional spatial uncertainty clustering and temporal thresholds; supported observation duration reflects the span of contiguous non-gap fixes within the uncertainty radius rather than a dedicated stationary sensor guarantee.
-- **Lifecycle & Background Classification**: Lifecycle telemetry (`isBackground`) records `UIApplication.shared.applicationState != .active` at the moment a fix is received. Non-active reception confirms ingestion during non-foreground execution phases, but should not be equated with guaranteed unthrottled or prolonged locked-screen tracking under iOS power management.
-- **Pending Outdoor Field Baseline**: Continuous GNSS battery consumption and fix cadence during extended locked-screen outdoor walks have not been fully characterized across device models and remain pending dedicated field comparison.
-- **User Force-Quit**: If the app is explicitly terminated from the iOS App Switcher, iOS suspends location delivery until the user manually relaunches the app.
-- **First Unlock After Reboot**: Due to on-disk data protection (`completeUntilFirstUserAuthentication`), the device must be unlocked at least once after reboot before background wakeups can read or write points.
-- **Provisioning Expiry**: Personal free Apple Developer provisioning profiles expire every 7 days, requiring the app to be re-signed and redeployed from Xcode.
+### Quickstart
 
-## License
+Requires macOS, Xcode with an iOS 17+ SDK, an Apple signing team and a physical iPhone for background recording. Source-only: no App Store download or prebuilt binary.
 
-- Source code is licensed under the [MIT License](LICENSE).
-- App icon assets are adapted from Wikimedia Commons and licensed under [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/) — see [ATTRIBUTION.md](ATTRIBUTION.md).
+```bash
+git clone https://github.com/simply-sunny/footsteps.git
+cd footsteps
+open Footsteps.xcodeproj
+```
+
+1. Select the **Footsteps** target → **Signing & Capabilities**. Choose your team, enable automatic signing and set a unique bundle identifier.
+2. Enable **Developer Mode** on your iPhone, connect it and select it as the run destination.
+3. Run (`⌘R`) and allow location access. For background recording, choose **Always** and enable **Precise Location** in iOS Settings.
+4. Open a detail view and tap its Health button if you want step counts. Health access is optional and read-only.
+
+**Explore a day:** use the date capsule to select or scrub dates, switch **Path / Time**, tap map observations for details, or tap the summary for Day Detail. Settings contains **Background Recording** and separate **Developer Diagnostics**.
+
+---
+
+### Know the limits
+
+- **Battery and background continuity:** navigation-grade GNSS is energy-intensive. Extended locked-screen cadence, cellular handoffs and battery impact still need physical-device testing. No sub-2% battery claim.
+- **Force-quit and reboot:** force-quitting stops location delivery until relaunch. Unlock once after a reboot so the protected store can be accessed.
+- **Provisioning:** free personal profiles expire after 7 days. Re-sign and redeploy; do not delete the app to renew signing if you need its history.
+- **Portability:** GPX/GeoJSON export and replay are not shipped yet. No cloud recovery. Preserve any data you need before removing or reinstalling the app.
+- **Inference:** between-fix lines and stationary grouping are conservative heuristics, not continuous ground truth or verified venue visits.
+
+See [privacy](PRIVACY.md) and [open issues](https://github.com/simply-sunny/footsteps/issues) for details.
+
+---
+
+### Verification
+
+With Xcode selected (`DEVELOPER_DIR` can point to your installed Xcode):
+
+```bash
+# Pure Foundation calendar, validation and geometry checks
+xcrun --sdk macosx swiftc Footsteps/TrajectoryMath.swift Footsteps/DayHistory.swift \
+  Tests/Task1FoundationTests.swift -o /tmp/footsteps-math
+/tmp/footsteps-math
+
+# Compile the app without signing
+xcodebuild -project Footsteps.xcodeproj -scheme Footsteps \
+  -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
+
+# Choose an available simulator, then run the app test target
+xcrun simctl list devices available
+xcodebuild -project Footsteps.xcodeproj -scheme Footsteps \
+  -destination 'platform=iOS Simulator,id=<SIMULATOR-UUID>' CODE_SIGNING_ALLOWED=NO test
+```
+
+Tests cover storage, schema migration, segmentation, calendar boundaries, Health sample ownership and map overlays. The historical-database migration test requires its external fixture; simulator tests do not establish physical-device battery or gesture behavior.
+
+---
+
+### Project structure
+
+```text
+Footsteps/LocationManager.swift   Core Location ingestion and permissions
+Footsteps/LocationPoint.swift     versioned raw-evidence schemas
+Footsteps/TrajectoryMath.swift    validation, segmentation and geometry
+Footsteps/DayHistory.swift        day partition and place reconstruction
+Footsteps/TrajectoryMapView.swift Path / Time overlays and map interaction
+Footsteps/DayDetailView.swift     Swift Charts day analysis
+Footsteps/StepCountReader.swift   on-demand Health queries
+Tests/                           Foundation checks and Xcode tests
+docs/                            GitHub Pages site and bundled assets
+scripts/bundle-docs.py            bundle Markdown for zero-fetch tabs
+```
+
+---
+
+### Docs
+
+**https://simply-sunny.github.io/footsteps/** — interactive Path / Time preview, setup, privacy and architecture.
+
+Site styles reuse [Sunny Components](https://github.com/simply-sunny/sunny-components) tokens and source-first patterns without adding a React runtime. After changing Markdown, run `python3 scripts/bundle-docs.py` to refresh the reader.
+
+### License
+
+[MIT](LICENSE) · Saunak Karnati · App icon: [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/) — see [attribution](ATTRIBUTION.md). Vendored site assets retain their licenses in [`docs/vendor/`](docs/vendor/).
