@@ -831,7 +831,7 @@ final class UIAndMapTests: XCTestCase {
             assignedPlaceLabel: "Place 1"
         )
 
-        // 1. In Path mode: overlay count must include polylines and stay circles
+        // 1. In Path mode: overlay count must include polylines and duration-weighted place circles
         _ = coordinator.updateMapOverlays(
             mapView: mapView,
             segments: [segment],
@@ -842,11 +842,11 @@ final class UIAndMapTests: XCTestCase {
         )
 
         let polylineOverlays = mapView.overlays.compactMap { $0 as? SegmentPolyline }
-        let stayOverlays = mapView.overlays.compactMap { $0 as? StayCircleOverlay }
+        let placeOverlays = mapView.overlays.compactMap { $0 as? PlaceCircleOverlay }
         let heatOverlays = mapView.overlays.compactMap { $0 as? DwellHeatOverlay }
 
         XCTAssertEqual(polylineOverlays.count, 1, "Path mode must render segment polylines")
-        XCTAssertEqual(stayOverlays.count, 1, "Path mode must render stay circles")
+        XCTAssertEqual(placeOverlays.count, 1, "Path mode must render duration-weighted place circles")
         XCTAssertEqual(heatOverlays.count, 0, "Path mode must not render heat overlays")
 
         // 2. In Time mode: overlay count must include heat overlays only (no trajectory polylines)
@@ -860,12 +860,96 @@ final class UIAndMapTests: XCTestCase {
         )
 
         let polylineOverlaysTime = mapView.overlays.compactMap { $0 as? SegmentPolyline }
-        let stayOverlaysTime = mapView.overlays.compactMap { $0 as? StayCircleOverlay }
+        let placeOverlaysTime = mapView.overlays.compactMap { $0 as? PlaceCircleOverlay }
         let heatOverlaysTime = mapView.overlays.compactMap { $0 as? DwellHeatOverlay }
 
         XCTAssertEqual(polylineOverlaysTime.count, 0, "Time mode must hide polylines")
-        XCTAssertEqual(stayOverlaysTime.count, 0, "Time mode replaces standard stay circles with heat overlays")
+        XCTAssertEqual(placeOverlaysTime.count, 0, "Time mode replaces standard place circles with heat overlays")
         XCTAssertEqual(heatOverlaysTime.count, 1, "Time mode must render dwell heat overlays")
+    }
+
+    func testGroupedThirteenStaysShowOneMarkerNotThirteen() {
+        let coordinator = TrajectoryMapView.Coordinator()
+        let mapView = MKMapView(frame: CGRect(x: 0, y: 0, width: 400, height: 800))
+
+        let t0 = Date(timeIntervalSince1970: 1772900000)
+        var thirteenStays: [DayStay] = []
+        var totalSupportedDwell: TimeInterval = 0.0
+
+        for i in 0..<13 {
+            let stayArr = t0.addingTimeInterval(Double(i * 3600)) // 1 hour apart
+            let stayDur: TimeInterval = 300.0 // 5 minutes each
+            totalSupportedDwell += stayDur
+            let stay = DayStay(
+                id: "stay_\(i)",
+                latitude: 40.4234 + Double(i % 3) * 0.00005, // within ~10m of anchor
+                longitude: -86.9176 + Double(i % 2) * 0.00005,
+                arrivalDate: stayArr,
+                departureDate: stayArr.addingTimeInterval(stayDur),
+                duration: stayDur,
+                horizontalAccuracy: 10.0 + Double(i)
+            )
+            thirteenStays.append(stay)
+        }
+
+        let (groupedPlaces, updatedStays) = DayHistory.groupStaysIntoPlaces(stays: thirteenStays)
+        XCTAssertEqual(groupedPlaces.count, 1, "All 13 proximal stays must group into exactly 1 DayPlace")
+        XCTAssertEqual(groupedPlaces[0].visitCount, 13, "DayPlace visitCount must be 13")
+        XCTAssertEqual(groupedPlaces[0].totalDuration, totalSupportedDwell, accuracy: 0.01, "Total supported dwell duration must match sum of all 13 stays exactly")
+
+        // 1. Path mode: must render exactly 1 PlaceCircleOverlay, NOT 13 redundant stay rings
+        _ = coordinator.updateMapOverlays(
+            mapView: mapView,
+            segments: [],
+            places: groupedPlaces,
+            stays: updatedStays,
+            displayMode: .path,
+            dayKey: "grouped_13_path"
+        )
+
+        let pathPlaceOverlays = mapView.overlays.compactMap { $0 as? PlaceCircleOverlay }
+        let pathStayOverlays = mapView.overlays.compactMap { $0 as? StayCircleOverlay }
+        XCTAssertEqual(pathPlaceOverlays.count, 1, "Path mode must render exactly 1 duration-weighted place marker for grouped place")
+        XCTAssertEqual(pathStayOverlays.count, 0, "Path mode must not render raw stay circles")
+        XCTAssertEqual(mapView.overlays.count, 1, "Total overlays in Path mode must be 1, not 13")
+
+        // 2. Time mode: retains individual duration heat overlays
+        _ = coordinator.updateMapOverlays(
+            mapView: mapView,
+            segments: [],
+            places: groupedPlaces,
+            stays: updatedStays,
+            displayMode: .time,
+            dayKey: "grouped_13_time"
+        )
+
+        let timeHeatOverlays = mapView.overlays.compactMap { $0 as? DwellHeatOverlay }
+        XCTAssertEqual(timeHeatOverlays.count, 13, "Time mode must render heat overlays for all 13 dwell episodes")
+    }
+
+    func testCoarseAnchorDoesNotSwallowContinuousWalk() {
+        let baseDate = Date(timeIntervalSince1970: 1772900000)
+
+        // Initial coarse fix with 108m accuracy followed by 1Hz continuous walk of 200m
+        var points: [TrajectoryPoint] = [
+            TrajectoryPoint(latitude: 40.42404, longitude: -86.91806, timestamp: baseDate, horizontalAccuracy: 108.0)
+        ]
+        for i in 1...150 {
+            points.append(
+                TrajectoryPoint(
+                    latitude: 40.42404 + Double(i) * 0.000015, // ~1.6m per second, ~250m walk
+                    longitude: -86.91806,
+                    timestamp: baseDate.addingTimeInterval(Double(i)),
+                    horizontalAccuracy: 6.5
+                )
+            )
+        }
+
+        let analysis = TrajectoryMath.analyzeDay(points: points)
+        XCTAssertEqual(analysis.segments.count, 1, "Continuous walk starting with coarse anchor must produce 1 moving segment")
+        XCTAssertEqual(analysis.singletons.count, 0, "Coarse anchor must not create a bogus stationary stay swallowing walk")
+        XCTAssertEqual(analysis.segments[0].points.count, 151)
+        XCTAssertGreaterThan(analysis.segments[0].distanceMeters, 200.0)
     }
 
     func testDwellHeatOverlayRadiusScalingWithDuration() {

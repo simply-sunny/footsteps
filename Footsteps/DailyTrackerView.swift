@@ -355,6 +355,7 @@ public struct DailyTrajectoryContainerView: View {
         )
         let dayKey = String(Int64(TrajectoryMath.dayInterval(for: selectedDate).start.timeIntervalSince1970))
 
+        let selectedPlace = history.places.first(where: { $0.id == selectedItemID })
         let selectedStay = history.stays.first(where: { $0.id == selectedItemID })
         let selectedSegment = history.movingSegments.first(where: { $0.id == selectedItemID })
         let selectedObs: TrajectoryPoint? = {
@@ -385,6 +386,7 @@ public struct DailyTrajectoryContainerView: View {
             // Map
             TrajectoryMapView(
                 segments: history.movingSegments,
+                places: history.places,
                 stays: history.stays,
                 singleObservations: history.singleObservations,
                 singletons: [],
@@ -446,10 +448,18 @@ public struct DailyTrajectoryContainerView: View {
             .presentationDetents([.medium, .large])
         }
         .sheet(isPresented: Binding(
-            get: { selectedItemID != nil && (selectedStay != nil || selectedSegment != nil || selectedObs != nil || selectedDebugPoint != nil) },
+            get: { selectedItemID != nil && (selectedPlace != nil || selectedStay != nil || selectedSegment != nil || selectedObs != nil || selectedDebugPoint != nil) },
             set: { if !$0 { selectedItemID = nil } }
         )) {
-            if let stay = selectedStay {
+            if let place = selectedPlace {
+                PlaceDetailCardView(
+                    place: place,
+                    stays: history.stays.filter { $0.assignedPlaceID == place.id }
+                )
+                .presentationDetents([.fraction(0.32), .medium])
+                .presentationDragIndicator(.visible)
+                .presentationBackgroundInteraction(.enabled(upThrough: .medium))
+            } else if let stay = selectedStay {
                 StayDetailCardView(stay: stay)
                     .presentationDetents([.fraction(0.24), .medium])
                     .presentationDragIndicator(.visible)
@@ -492,6 +502,79 @@ public struct DailyTrajectoryContainerView: View {
 }
 
 // MARK: - Tap Detail Cards
+
+/// Clean card displaying grouped place details and truthful individual visit list.
+public struct PlaceDetailCardView: View {
+    public let place: DayPlace
+    public let stays: [DayStay]
+
+    public var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 8) {
+                Image(systemName: "mappin.circle.fill")
+                    .foregroundColor(.orange)
+                    .font(.title3)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(place.label)
+                        .font(.headline)
+                    Text("\(place.visitCount) \(place.visitCount == 1 ? "visit" : "visits") · \(DayHistory.formatDuration(place.totalDuration)) total")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+            }
+
+            HStack(spacing: 20) {
+                HStack(spacing: 6) {
+                    Image(systemName: "hourglass")
+                        .foregroundColor(.secondary)
+                    Text(DayHistory.formatDuration(place.totalDuration))
+                        .font(.subheadline.bold())
+                }
+
+                HStack(spacing: 6) {
+                    Image(systemName: "calendar")
+                        .foregroundColor(.secondary)
+                    Text(DayHistory.formatObservedBounds(start: place.firstArrival, end: place.lastDeparture))
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+            }
+
+            if stays.count > 1 {
+                Divider()
+                Text("INDIVIDUAL VISITS")
+                    .font(.caption2.bold())
+                    .foregroundColor(.secondary)
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(stays) { stay in
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(DayHistory.formatObservedBounds(start: stay.arrivalDate, end: stay.departureDate))
+                                        .font(.caption.bold())
+                                        .foregroundColor(.primary)
+                                    Text(String(format: "±%.1fm accuracy", stay.horizontalAccuracy))
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                }
+                                Spacer()
+                                Text(DayHistory.formatDuration(stay.duration))
+                                    .font(.caption.bold())
+                                    .foregroundColor(.secondary)
+                            }
+                            .padding(.vertical, 2)
+                        }
+                    }
+                }
+                .frame(maxHeight: 120)
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
 
 /// Clean card displaying neutral place details for a tapped stay.
 public struct StayDetailCardView: View {

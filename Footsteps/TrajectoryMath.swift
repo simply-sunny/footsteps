@@ -177,7 +177,15 @@ public struct TrajectoryDayAnalysis: Equatable, Sendable {
 }
 
 public enum TrajectoryMath {
-    /// Max acceptable horizontal accuracy in meters for display segments (200m).
+    /// Maximum stationary dwell anchor radius in meters (25.0m).
+    ///
+    /// Bounds the uncertainty radius used when evaluating whether a sequence of fixes represents a stationary dwell.
+    /// A coarse fix (e.g. 100m–200m accuracy) indicates high spatial uncertainty, NOT evidence that a user is stationary
+    /// within a massive 200m circle. Bounding the dwell radius prevents coarse initial fixes from swallowing continuous walking bouts.
+    public static let defaultMaxDwellRadius: Double = 25.0
+
+    /// Minimum stationary dwell anchor radius in meters (10.0m).
+    public static let defaultMinDwellRadius: Double = 10.0
     public static let defaultMaxHorizontalAccuracy: Double = 200.0
 
     /// Suspicious horizontal accuracy boundary in meters (100m).
@@ -272,7 +280,8 @@ public enum TrajectoryMath {
         suspiciousAccuracyThreshold: Double = defaultSuspiciousAccuracyThreshold,
         maxTimeGapSeconds: Double = defaultMaxTimeGapSeconds,
         maxSpeedMetersPerSecond: Double = defaultMaxSpeedMetersPerSecond,
-        maxDistanceMeters: Double = defaultMaxDistanceMeters
+        maxDistanceMeters: Double = defaultMaxDistanceMeters,
+        maxDwellRadius: Double = defaultMaxDwellRadius
     ) -> TrajectoryDayAnalysis {
         let sortedPoints = points.sorted {
             if $0.timestamp != $1.timestamp {
@@ -331,9 +340,9 @@ public enum TrajectoryMath {
                 return
             }
 
-            // Anchored uncertainty-aware stationary evaluation
+            // Anchored uncertainty-aware stationary evaluation (bounded by maxDwellRadius to prevent coarse fixes from swallowing movement)
             let firstPt = currentRun[0]
-            let firstRadius = max(firstPt.horizontalAccuracy, 10.0)
+            let firstRadius = min(max(firstPt.horizontalAccuracy, defaultMinDwellRadius), maxDwellRadius)
             let maxDisplacement = currentRun.map { haversineDistance(from: firstPt, to: $0) }.max() ?? 0.0
 
             if maxDisplacement <= firstRadius {
@@ -353,7 +362,7 @@ public enum TrajectoryMath {
 
             while i < currentRun.count {
                 let anchor = currentRun[i]
-                let anchorRadius = max(anchor.horizontalAccuracy, 10.0)
+                let anchorRadius = min(max(anchor.horizontalAccuracy, defaultMinDwellRadius), maxDwellRadius)
 
                 var j = i
                 while (j + 1) < currentRun.count && haversineDistance(from: anchor, to: currentRun[j + 1]) <= anchorRadius {
@@ -388,7 +397,7 @@ public enum TrajectoryMath {
             if !movingPoints.isEmpty {
                 if movingPoints.count >= 2 {
                     let anchor = movingPoints[0]
-                    let anchorRadius = max(anchor.horizontalAccuracy, 10.0)
+                    let anchorRadius = min(max(anchor.horizontalAccuracy, defaultMinDwellRadius), maxDwellRadius)
                     let maxDisp = movingPoints.map { haversineDistance(from: anchor, to: $0) }.max() ?? 0.0
                     if maxDisp <= anchorRadius {
                         let dwellDuration = movingPoints.last!.timestamp.timeIntervalSince(anchor.timestamp)
@@ -488,7 +497,8 @@ public enum TrajectoryMath {
         suspiciousAccuracyThreshold: Double = defaultSuspiciousAccuracyThreshold,
         maxTimeGapSeconds: Double = defaultMaxTimeGapSeconds,
         maxSpeedMetersPerSecond: Double = defaultMaxSpeedMetersPerSecond,
-        maxDistanceMeters: Double = defaultMaxDistanceMeters
+        maxDistanceMeters: Double = defaultMaxDistanceMeters,
+        maxDwellRadius: Double = defaultMaxDwellRadius
     ) -> [TrajectorySegment] {
         analyzeDay(
             points: points,
@@ -496,7 +506,8 @@ public enum TrajectoryMath {
             suspiciousAccuracyThreshold: suspiciousAccuracyThreshold,
             maxTimeGapSeconds: maxTimeGapSeconds,
             maxSpeedMetersPerSecond: maxSpeedMetersPerSecond,
-            maxDistanceMeters: maxDistanceMeters
+            maxDistanceMeters: maxDistanceMeters,
+            maxDwellRadius: maxDwellRadius
         ).segments
     }
 

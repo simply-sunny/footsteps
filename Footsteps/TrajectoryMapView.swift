@@ -28,6 +28,23 @@ public final class SegmentPolyline: MKPolyline {
     }
 }
 
+/// MKCircle subclass representing a grouped geographical place with one or more dwell visits.
+public final class PlaceCircleOverlay: MKCircle {
+    public var placeID: String = ""
+    public var place: DayPlace?
+
+    public static func create(from place: DayPlace) -> PlaceCircleOverlay {
+        let coord = CLLocationCoordinate2D(latitude: place.latitude, longitude: place.longitude)
+        // Scaled radius based on total dwell duration (15m to 65m)
+        let durationMinutes = max(1.0, place.totalDuration / 60.0)
+        let radius = max(15.0, min(65.0, 15.0 + 8.0 * log2(durationMinutes)))
+        let circle = PlaceCircleOverlay(center: coord, radius: radius)
+        circle.placeID = place.id
+        circle.place = place
+        return circle
+    }
+}
+
 /// MKCircle subclass representing a supported stationary dwell episode.
 public final class StayCircleOverlay: MKCircle {
     public var stayID: String = ""
@@ -179,6 +196,7 @@ public final class SingletonCircleOverlay: MKCircle {
 /// SwiftUI wrapper for MKMapView supporting Path and Time modes, dwell heat rendering, and tap hit-testing.
 public struct TrajectoryMapView: UIViewRepresentable {
     public let segments: [TrajectorySegment]
+    public let places: [DayPlace]
     public let stays: [DayStay]
     public let singleObservations: [TrajectoryPoint]
     public let singletons: [TrajectorySingleton]
@@ -191,6 +209,7 @@ public struct TrajectoryMapView: UIViewRepresentable {
 
     public init(
         segments: [TrajectorySegment] = [],
+        places: [DayPlace] = [],
         stays: [DayStay] = [],
         singleObservations: [TrajectoryPoint] = [],
         singletons: [TrajectorySingleton] = [],
@@ -202,6 +221,7 @@ public struct TrajectoryMapView: UIViewRepresentable {
         selectedItemID: Binding<String?> = .constant(nil)
     ) {
         self.segments = segments
+        self.places = places
         self.stays = stays
         self.singleObservations = singleObservations
         self.singletons = singletons
@@ -222,6 +242,7 @@ public struct TrajectoryMapView: UIViewRepresentable {
         selectedSegmentID: Binding<String?> = .constant(nil)
     ) {
         self.segments = segments
+        self.places = []
         self.stays = []
         self.singleObservations = []
         self.singletons = singletons
@@ -287,9 +308,19 @@ public struct TrajectoryMapView: UIViewRepresentable {
             effectiveSingleObs = singleObservations
         }
 
+        let effectivePlaces: [DayPlace]
+        if !places.isEmpty {
+            effectivePlaces = places
+        } else if !effectiveStays.isEmpty {
+            effectivePlaces = DayHistory.groupStaysIntoPlaces(stays: effectiveStays).places
+        } else {
+            effectivePlaces = []
+        }
+
         _ = coordinator.updateMapOverlays(
             mapView: mapView,
             segments: segments,
+            places: effectivePlaces,
             stays: effectiveStays,
             singleObservations: effectiveSingleObs,
             rawPoints: rawPoints,
@@ -311,6 +342,7 @@ public struct TrajectoryMapView: UIViewRepresentable {
 
     public final class Coordinator: NSObject, MKMapViewDelegate {
         public var segments: [TrajectorySegment] = []
+        public var places: [DayPlace] = []
         public var stays: [DayStay] = []
         public var singleObservations: [TrajectoryPoint] = []
         public var singletons: [TrajectorySingleton] = []
@@ -371,6 +403,7 @@ public struct TrajectoryMapView: UIViewRepresentable {
         public func updateMapOverlays(
             mapView: MKMapView,
             segments: [TrajectorySegment],
+            places: [DayPlace] = [],
             stays: [DayStay] = [],
             singleObservations: [TrajectoryPoint] = [],
             rawPoints: [TrajectoryPoint] = [],
@@ -379,8 +412,17 @@ public struct TrajectoryMapView: UIViewRepresentable {
             dayKey: String,
             forceRecenter: Bool = false
         ) -> Bool {
+            let effectivePlaces: [DayPlace]
+            if !places.isEmpty {
+                effectivePlaces = places
+            } else if !stays.isEmpty {
+                effectivePlaces = DayHistory.groupStaysIntoPlaces(stays: stays).places
+            } else {
+                effectivePlaces = []
+            }
+
             let dayChanged = (lastRenderedDayKey != dayKey)
-            let signature = "\(dayKey)_\(displayMode.rawValue)_\(showDebugOverlay)_\(segments.count)_\(stays.count)_\(singleObservations.count)_\(rawPoints.count)"
+            let signature = "\(dayKey)_\(displayMode.rawValue)_\(showDebugOverlay)_\(segments.count)_\(effectivePlaces.count)_\(stays.count)_\(singleObservations.count)_\(rawPoints.count)"
 
             guard signature != lastRenderedSignature || dayChanged || forceRecenter else {
                 return false
@@ -388,6 +430,7 @@ public struct TrajectoryMapView: UIViewRepresentable {
 
             lastRenderedSignature = signature
             self.segments = segments
+            self.places = effectivePlaces
             self.stays = stays
             self.singleObservations = singleObservations
             self.debugOverlays = []
@@ -400,8 +443,8 @@ public struct TrajectoryMapView: UIViewRepresentable {
                     mapView.addOverlay(polyline)
                 }
 
-                for stay in stays {
-                    let circle = StayCircleOverlay.create(from: stay)
+                for place in effectivePlaces {
+                    let circle = PlaceCircleOverlay.create(from: place)
                     mapView.addOverlay(circle)
                 }
             } else if displayMode == .time {
@@ -468,7 +511,13 @@ public struct TrajectoryMapView: UIViewRepresentable {
                     renderer.lineWidth = isSelected ? 6.0 : 3.5
                     renderer.setNeedsDisplay()
                 } else if let renderer = mapView.renderer(for: overlay) as? MKCircleRenderer {
-                    if let circle = overlay as? StayCircleOverlay {
+                    if let circle = overlay as? PlaceCircleOverlay {
+                        let isSelected = circle.placeID == selectedItemID
+                        renderer.fillColor = isSelected ? UIColor.systemOrange.withAlphaComponent(0.40) : UIColor.systemBlue.withAlphaComponent(0.25)
+                        renderer.strokeColor = isSelected ? UIColor.systemOrange : UIColor.systemBlue.withAlphaComponent(0.85)
+                        renderer.lineWidth = isSelected ? 3.0 : 1.5
+                        renderer.setNeedsDisplay()
+                    } else if let circle = overlay as? StayCircleOverlay {
                         let isSelected = circle.stayID == selectedItemID
                         renderer.fillColor = isSelected ? UIColor.systemOrange.withAlphaComponent(0.40) : UIColor.systemBlue.withAlphaComponent(0.25)
                         renderer.strokeColor = isSelected ? UIColor.systemOrange : UIColor.systemBlue.withAlphaComponent(0.85)
@@ -519,6 +568,15 @@ public struct TrajectoryMapView: UIViewRepresentable {
             if let heatCircle = overlay as? DwellHeatOverlay {
                 let renderer = DwellHeatRenderer(overlay: heatCircle)
                 renderer.isSelected = (heatCircle.stayID == selectedItemID)
+                return renderer
+            }
+
+            if let placeCircle = overlay as? PlaceCircleOverlay {
+                let renderer = MKCircleRenderer(circle: placeCircle)
+                let isSelected = placeCircle.placeID == selectedItemID
+                renderer.fillColor = isSelected ? UIColor.systemOrange.withAlphaComponent(0.40) : UIColor.systemBlue.withAlphaComponent(0.25)
+                renderer.strokeColor = isSelected ? UIColor.systemOrange : UIColor.systemBlue.withAlphaComponent(0.85)
+                renderer.lineWidth = isSelected ? 3.0 : 1.5
                 return renderer
             }
 
@@ -578,7 +636,23 @@ public struct TrajectoryMapView: UIViewRepresentable {
             var bestID: String? = nil
             var bestDistance: Double = .infinity
 
-            // 1. Hit test stays
+            // 1. Hit test places or stays
+            for place in places {
+                let screen = mapView.convert(
+                    CLLocationCoordinate2D(latitude: place.latitude, longitude: place.longitude),
+                    toPointTo: mapView
+                )
+                let dx = Double(tapPoint.x - screen.x)
+                let dy = Double(tapPoint.y - screen.y)
+                let dist = (dx * dx + dy * dy).squareRoot()
+                if dist < bestDistance {
+                    bestDistance = dist
+                    if dist <= hitTolerance {
+                        bestID = place.id
+                    }
+                }
+            }
+
             for stay in stays {
                 let screen = mapView.convert(
                     CLLocationCoordinate2D(latitude: stay.latitude, longitude: stay.longitude),

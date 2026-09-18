@@ -299,6 +299,125 @@ struct Task2FoundationTests {
         )
         assertFalse(formattedInterval.isEmpty, "Time interval must format non-empty string")
 
+        // 14. REGRESSION: Coarse Anchor (e.g. 108m-150m) Must NOT Swallow Walk Within Giant Circle
+        // Branch 1: Whole-Run Evaluation
+        // User gets initial coarse fix (120m accuracy), then walks 60s at 1.2m/s (~72m displacement).
+        // Max displacement is 72m, which is <= 120m (within coarse circle), but exceeds physical stationary bound (25m).
+        var wholeRunCoarsePoints: [TrajectoryPoint] = [
+            TrajectoryPoint(latitude: 37.7741, longitude: -122.4191, timestamp: baseDate, horizontalAccuracy: 120.0)
+        ]
+        for i in 1...60 {
+            wholeRunCoarsePoints.append(
+                TrajectoryPoint(
+                    latitude: 37.7741 + Double(i) * 0.000012, // ~1.3m per sec, total ~78m
+                    longitude: -122.4191,
+                    timestamp: baseDate.addingTimeInterval(Double(i)),
+                    horizontalAccuracy: 6.0
+                )
+            )
+        }
+        let wholeRunAnalysis = TrajectoryMath.analyzeDay(points: wholeRunCoarsePoints)
+        assertTrue(wholeRunAnalysis.segments.count == 1, "Whole-run coarse anchor must NOT swallow walk into single stay (segments: \(wholeRunAnalysis.segments.count))")
+        assertTrue(wholeRunAnalysis.singletons.isEmpty, "Should have 0 stay singletons for continuous walk (got: \(wholeRunAnalysis.singletons.count))")
+        assertTrue(wholeRunAnalysis.segments.first?.points.count == 61, "Segment should contain all 61 points")
+
+        // Branch 2: Local Episode Evaluation in Multi-Phase Run
+        // Short walk 1 (20s) -> Coarse anchor fix (150m accuracy) -> Continuous walk 2 (80s, moving 80m away)
+        var localCoarsePoints: [TrajectoryPoint] = []
+        for i in 0...20 {
+            localCoarsePoints.append(
+                TrajectoryPoint(
+                    latitude: 37.7700 + Double(i) * 0.000015,
+                    longitude: -122.4191,
+                    timestamp: baseDate.addingTimeInterval(Double(i)),
+                    horizontalAccuracy: 5.0
+                )
+            )
+        }
+        let coarseAnchorTime = baseDate.addingTimeInterval(21)
+        localCoarsePoints.append(
+            TrajectoryPoint(
+                latitude: 37.7700 + 21.0 * 0.000015,
+                longitude: -122.4191,
+                timestamp: coarseAnchorTime,
+                horizontalAccuracy: 150.0
+            )
+        )
+        for i in 1...80 {
+            localCoarsePoints.append(
+                TrajectoryPoint(
+                    latitude: 37.7700 + Double(21 + i) * 0.000015,
+                    longitude: -122.4191,
+                    timestamp: coarseAnchorTime.addingTimeInterval(Double(i)),
+                    horizontalAccuracy: 6.0
+                )
+            )
+        }
+        let localAnalysis = TrajectoryMath.analyzeDay(points: localCoarsePoints)
+        assertTrue(localAnalysis.segments.count >= 1, "Local coarse anchor must NOT swallow walk 2 into a dwell singleton")
+        let totalMovingPts = localAnalysis.segments.reduce(0) { $0 + $1.points.count }
+        assertTrue(totalMovingPts >= 100, "Moving points should include all walk points (got \(totalMovingPts)/102)")
+
+        // Branch 3: Tail Remainder Evaluation
+        // Moving segment starting with a coarse anchor and points extending 50m away (< 120m)
+        var tailCoarsePoints: [TrajectoryPoint] = [
+            TrajectoryPoint(latitude: 37.7741, longitude: -122.4191, timestamp: baseDate, horizontalAccuracy: 120.0)
+        ]
+        for i in 1...40 {
+            tailCoarsePoints.append(
+                TrajectoryPoint(
+                    latitude: 37.7741 + Double(i) * 0.000012, // ~50m displacement
+                    longitude: -122.4191,
+                    timestamp: baseDate.addingTimeInterval(Double(i)),
+                    horizontalAccuracy: 5.0
+                )
+            )
+        }
+        let tailAnalysis = TrajectoryMath.analyzeDay(points: tailCoarsePoints)
+        assertTrue(tailAnalysis.segments.count == 1, "Tail coarse points must produce a moving segment not a stay singleton")
+
+        // Branch 4: True Pause During Walk Preserved as Stay Dwell
+        // Walk 1 (60s) -> True Pause at spot (100s, displacement <= 5m) -> Walk 2 (60s)
+        var walkPauseWalkPoints: [TrajectoryPoint] = []
+        for i in 0...60 {
+            walkPauseWalkPoints.append(
+                TrajectoryPoint(
+                    latitude: 37.7741 + Double(i) * 0.000015,
+                    longitude: -122.4191,
+                    timestamp: baseDate.addingTimeInterval(Double(i)),
+                    horizontalAccuracy: 5.0
+                )
+            )
+        }
+        let pauseAnchor = walkPauseWalkPoints.last!
+        let pauseStart = pauseAnchor.timestamp
+        for i in 1...100 {
+            walkPauseWalkPoints.append(
+                TrajectoryPoint(
+                    latitude: pauseAnchor.latitude + Double(i % 3) * 0.00001,
+                    longitude: pauseAnchor.longitude + Double(i % 2) * 0.00001,
+                    timestamp: pauseStart.addingTimeInterval(Double(i)),
+                    horizontalAccuracy: 8.0
+                )
+            )
+        }
+        let walk2Anchor = walkPauseWalkPoints.last!
+        let walk2Start = walk2Anchor.timestamp
+        for i in 1...60 {
+            walkPauseWalkPoints.append(
+                TrajectoryPoint(
+                    latitude: pauseAnchor.latitude + Double(i) * 0.000015,
+                    longitude: -122.4191,
+                    timestamp: walk2Start.addingTimeInterval(Double(i)),
+                    horizontalAccuracy: 5.0
+                )
+            )
+        }
+        let wpwAnalysis = TrajectoryMath.analyzeDay(points: walkPauseWalkPoints)
+        assertTrue(wpwAnalysis.segments.count == 2, "Walk-Pause-Walk must produce 2 moving segments (got: \(wpwAnalysis.segments.count))")
+        assertTrue(wpwAnalysis.singletons.filter { $0.observationDuration >= 60.0 }.count == 1, "Walk-Pause-Walk must preserve true pause as 1 dwell stay")
+
+
         if failureCount > 0 {
             print("Task 2 Foundation Tests FAILED with \(failureCount) failures.")
             exit(1)

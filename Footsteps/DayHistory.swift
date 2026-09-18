@@ -208,7 +208,7 @@ public struct DayHistory: Equatable, Sendable {
                     departureDate: min(dep, effectiveEnd),
                     duration: singleton.observationDuration,
                     horizontalAccuracy: singleton.point.horizontalAccuracy,
-                    anchorRadius: max(singleton.point.horizontalAccuracy, 15.0)
+                    anchorRadius: min(max(singleton.point.horizontalAccuracy, 10.0), TrajectoryMath.defaultMaxDwellRadius)
                 )
                 stays.append(stay)
             } else {
@@ -334,7 +334,7 @@ public struct DayHistory: Equatable, Sendable {
     // MARK: - Conservative Place Clustering
 
     /// Groups stays into conservative, deterministically numbered places using anchored proximity.
-    private static func groupStaysIntoPlaces(
+    public static func groupStaysIntoPlaces(
         stays: [DayStay],
         proximityThresholdMeters: Double = 65.0
     ) -> (places: [DayPlace], updatedStays: [DayStay]) {

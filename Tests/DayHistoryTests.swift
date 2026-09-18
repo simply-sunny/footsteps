@@ -283,4 +283,67 @@ final class DayHistoryTests: XCTestCase {
         let startDist2 = history.cumulativeDistanceSeries[1].first?.distanceMeters ?? 0
         XCTAssertEqual(startDist2, endDist1, accuracy: 0.001)
     }
+
+    // MARK: - 11. Coarse Anchor Fix Does Not Swallow Walk in DayHistory
+    func testCoarseAnchorWalkNotSwallowedInDayHistory() {
+        let cal = makeCalendar()
+        let day = cal.date(from: DateComponents(year: 2026, month: 6, day: 15))!
+        let now = day.addingTimeInterval(86400 * 2)
+
+        var points: [TrajectoryPoint] = [
+            makePoint(lat: 37.7749, lon: -122.4194, time: day.addingTimeInterval(36000), acc: 120.0)
+        ]
+        for i in 1...60 {
+            points.append(
+                makePoint(
+                    lat: 37.7749 + Double(i) * 0.000015,
+                    lon: -122.4194,
+                    time: day.addingTimeInterval(36000 + Double(i)),
+                    acc: 5.0
+                )
+            )
+        }
+
+        let history = DayHistory.build(points: points, selectedDate: day, now: now, calendar: cal)
+
+        XCTAssertEqual(history.movingSegments.count, 1, "Continuous walk starting with coarse anchor must be preserved as moving segment")
+        XCTAssertGreaterThan(history.observedDistanceMeters, 50.0)
+        XCTAssertEqual(history.stays.count, 0, "No false stationary stay should swallow the walk")
+        XCTAssertGreaterThan(history.movingDuration, 50.0)
+    }
+
+    // MARK: - 12. Grouped 13 Stays Produce 1 Place with Exact Summed Duration
+    func testGrouped13StaysProduceOnePlaceWithSummedDuration() {
+        let cal = makeCalendar()
+        let day = cal.date(from: DateComponents(year: 2026, month: 6, day: 15))!
+        let now = day.addingTimeInterval(86400 * 2)
+
+        var points: [TrajectoryPoint] = []
+        var totalExpectedDwell: TimeInterval = 0.0
+
+        for stayIdx in 0..<13 {
+            let stayStart = day.addingTimeInterval(Double(stayIdx * 3600 + 600))
+            let duration: TimeInterval = 180.0 // 3 minutes each
+            totalExpectedDwell += duration
+
+            for i in 0...18 { // 10s fixes for 180s
+                points.append(
+                    makePoint(
+                        lat: 37.7749 + Double(stayIdx % 3) * 0.00002, // within ~5m
+                        lon: -122.4194 + Double(stayIdx % 2) * 0.00002,
+                        time: stayStart.addingTimeInterval(Double(i * 10)),
+                        acc: 8.0
+                    )
+                )
+            }
+        }
+
+        let history = DayHistory.build(points: points, selectedDate: day, now: now, calendar: cal)
+
+        XCTAssertEqual(history.stays.count, 13, "Should detect all 13 distinct stay episodes")
+        XCTAssertEqual(history.places.count, 1, "All 13 proximal stays must be grouped into exactly 1 DayPlace")
+        XCTAssertEqual(history.places[0].visitCount, 13)
+        XCTAssertEqual(history.places[0].totalDuration, totalExpectedDwell, accuracy: 1.0)
+        XCTAssertEqual(history.stationaryDuration, totalExpectedDwell, accuracy: 1.0, "Total stationary duration must match sum of individual visits without bridging gaps")
+    }
 }
