@@ -23,43 +23,23 @@
 
 ---
 
-Footsteps records raw Core Location observations and reconstructs your day without turning missing data into invented travel. Everything stays on-device — no account, no cloud sync.
+Footsteps records raw Core Location observations and reconstructs your day. Everything stays on-device — no account, no cloud sync.
 
-```text
-Core Location → protected SwiftData store → daily reconstruction → Path / Time
-```
-
-- **Path:** movement and stationary observations. Gaps, poor fixes and implausible jumps split routes.
-- **Time:** radial heat weighted by stay duration, not sample count.
-- **Day Detail:** distance, places, moving time, dwell map and moving / stationary / unknown breakdown.
-- **Optional Health:** read steps on demand. Read-only; no write access.
-
----
+- **Path:** movement and stationary observations; gaps and poor fixes split routes.
+- **Time:** radial heat weighted by stay duration.
+- **Day Detail:** distance, places, moving time, moving / stationary / unknown breakdown.
+- **Health:** steps on demand, read-only.
 
 ### Quickstart
 
-Requires macOS, Xcode with an iOS 17+ SDK, an Apple signing team and a physical iPhone.
+Requires macOS, Xcode (iOS 17+ SDK), an Apple signing team and a physical iPhone.
 
 ```bash
 git clone https://github.com/simply-sunny/footsteps.git
-cd footsteps
 open Footsteps.xcodeproj
 ```
 
-1. Select the **Footsteps** target → **Signing & Capabilities**. Choose your team and set a unique bundle identifier.
-2. Enable **Developer Mode** on your iPhone, connect it and select it as the run destination.
-3. Run (`⌘R`) and allow location access. Choose **Always** and enable **Precise Location** for background recording.
-
----
-
-### Know the limits
-
-- **Battery:** navigation-grade GNSS is energy-intensive. No sub-2% battery claim.
-- **Force-quit:** stops location delivery until relaunch. Unlock once after a reboot.
-- **Provisioning:** free profiles expire after 7 days. Re-sign without deleting the app.
-- **Portability:** no GPX/GeoJSON export yet. Preserve data before reinstalling.
-
----
+Set your team and bundle ID under **Signing & Capabilities**, enable **Developer Mode** on your iPhone, then run (`⌘R`). Choose **Always** location access and enable **Precise Location** for background recording.
 
 ### License
 
